@@ -1,60 +1,1158 @@
-import './style.css'
-import javascriptLogo from './assets/javascript.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import { setupCounter } from './counter.js'
+import '../style.css';
+import { supabase } from './lib/supabase.js';
+import { calculateDistance, getCurrentPosition } from './lib/geo.js';
+import { renderABM, renderAuthorizations, renderReports, renderLogs, renderSecurityPanel } from './components/admin.js';
+import { renderAdvancedReports } from './components/advanced_reports.js';
+import { renderProfile } from './components/profile.js';
+import { renderAdminSettings } from './components/admin_settings.js';
+import { renderAnalytics } from './components/analytics.js';
+import { renderHolidays } from './components/holidays.js';
+import { renderDailyReports } from './components/daily_reports.js';
+import { renderUserStats } from './components/user_stats.js';
+import { getSettings, resolveStandardHours } from './lib/settings.js'; 
+import { showNotification } from './lib/notifications.js'; 
+import { downloadICS } from './lib/calendar.js';
 
-document.querySelector('#app').innerHTML = `
-<section id="center">
-  <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
-    <img src="${javascriptLogo}" class="framework" alt="JavaScript logo"/>
-    <img src=${viteLogo} class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/main.js</code> and save to test <code>HMR</code></p>
-  </div>
-  <button id="counter" type="button" class="counter"></button>
-</section>
+// Register Service Worker for PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(err => {
+      console.warn('SW registration failed:', err);
+    });
+  });
+}
 
-<div class="ticks"></div>
+const app = document.querySelector('#app');
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#documentation-icon"></use></svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank">
-          <img class="logo" src=${viteLogo} alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript" target="_blank">
-          <img class="button-icon" src="${javascriptLogo}" alt="">
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#social-icon"></use></svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li><a href="https://github.com/vitejs/vite" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#github-icon"></use></svg>GitHub</a></li>
-      <li><a href="https://chat.vite.dev/" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#discord-icon"></use></svg>Discord</a></li>
-      <li><a href="https://x.com/vite_js" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#x-icon"></use></svg>X.com</a></li>
-      <li><a href="https://bsky.app/profile/vite.dev" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#bluesky-icon"></use></svg>Bluesky</a></li>
-    </ul>
-  </div>
-</section>
+// State management
+let session = null;
+let profile = null;
+let settings = null;
 
-<div class="ticks"></div>
-<section id="spacer"></section>
-`
+/**
+ * Initialize application
+ */
+async function init() {
+  console.log('--- APP INIT START ---');
+  try {
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    session = currentSession;
+    console.log('Session fetched:', session ? 'Active' : 'None');
 
-setupCounter(document.querySelector('#counter'))
+    // Load settings globally
+    settings = await getSettings();
+    console.log('Settings fetched');
+
+    if (session) {
+      console.log('User logged in, fetching profile...');
+      await fetchProfile();
+      console.log('Profile fetched, rendering dashboard...');
+      renderDashboard();
+    } else {
+      console.log('No session, rendering auth...');
+      renderAuth();
+    }
+  } catch (err) {
+    console.error('CRITICAL INIT ERROR:', err);
+    if (app) app.innerHTML = `<div style="padding:2rem; color:white;"><h1>Error Crítico</h1><p>${err.message}</p></div>`;
+  }
+
+  // Listen for auth changes
+  supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    session = newSession;
+    if (session) {
+      await fetchProfile();
+      renderDashboard();
+    } else {
+      profile = null;
+      renderAuth();
+      showNotification('Has cerrado sesión.', 'info'); 
+    }
+  });
+}
+
+async function fetchProfile() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.user.id)
+    .single();
+  
+  if (error) {
+    console.warn('Profile not found in DB, using session info.', error);
+    const isAdminEmail = session.user.email?.toLowerCase() === 'ipavelek@gmail.com';
+    profile = { 
+      id: session.user.id, 
+      email: session.user.email,
+      first_name: isAdminEmail ? 'Israel (Local)' : 'Usuario',
+      role: isAdminEmail ? 'director' : 'user' 
+    };
+  } else {
+    profile = data;
+  }
+
+  if (session.user.email?.toLowerCase() === 'ipavelek@gmail.com') {
+    if (profile) {
+      profile.role = 'director';
+      if (profile.first_name === 'Usuario') profile.first_name = 'Israel';
+    }
+  }
+}
+
+function renderAuth() {
+  console.log('--- RENDERING AUTH ---');
+  if (!app) {
+    console.error('CRITICAL: #app element not found!');
+    return;
+  }
+  app.innerHTML = `
+    <div class="auth-container glass animate-in">
+      <h1 style="text-align: center; margin-bottom: 2rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+        <i data-lucide="clock" style="width: 32px; height: 32px; color: var(--secondary);"></i> UTN Asistencia
+      </h1>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="email">Correo Institucional</label>
+          <input type="email" id="email" required placeholder="usuario@utn.edu.ar">
+        </div>
+        <div class="form-group">
+          <label for="password">Contraseña</label>
+          <input type="password" id="password" required placeholder="••••••••">
+        </div>
+        <button type="submit" id="login-btn">Iniciar Sesión</button>
+      </form>
+      <p id="auth-error" style="color: var(--danger); margin-top: 1rem; font-size: 0.875rem; display: none;"></p>
+    </div>
+  `;
+
+  document.querySelector('#login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.querySelector('#email').value;
+    const password = document.querySelector('#password').value;
+    const errorEl = document.querySelector('#auth-error');
+    const btn = document.querySelector('#login-btn');
+
+    btn.disabled = true;
+    btn.textContent = 'Iniciando...';
+    errorEl.style.display = 'none';
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      errorEl.textContent = error.message;
+      errorEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Iniciar Sesión';
+      showNotification(error.message, 'error'); 
+    } else {
+      showNotification('Sesión iniciada con éxito.', 'success'); 
+    }
+  });
+  if (window.lucide) window.lucide.createIcons();
+}
+
+async function renderDashboard() {
+  console.log('--- RENDERING DASHBOARD ---');
+  if (!app) {
+    console.error('CRITICAL: #app element not found!');
+    return;
+  }
+  const isAdminEmail = session?.user?.email?.toLowerCase() === 'ipavelek@gmail.com';
+  const standardHours = resolveStandardHours(profile, settings);
+
+  app.innerHTML = `
+    <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+      <div>
+        <h1 style="background: var(--accent-gradient); -webkit-background-clip: text; background-clip: text; -webkit-fill-color: transparent; display: flex; align-items: center; gap: 0.5rem;">
+          <i data-lucide="user-circle"></i> Hola, ${profile?.first_name || (isAdminEmail ? 'Israel' : 'Usuario')}
+        </h1>
+        <p style="color: var(--text-muted)">${profile?.category || (isAdminEmail ? 'Director' : 'Personal No Docente')} - ${profile?.personnel_group || ''}</p>
+      </div>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <div id="notif-bell" style="position: relative; cursor: pointer; padding: 0.5rem; color: var(--text-muted);">
+          <i data-lucide="bell" style="width: 20px;"></i>
+          <span id="notif-count" style="display: none; position: absolute; top: 0; right: 0; background: var(--danger); color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 0.65rem; align-items: center; justify-content: center; font-weight: bold;">0</span>
+        </div>
+        <button id="profile-btn" style="width: auto; padding: 0.5rem 1rem; background: var(--surface); border: 1px solid var(--glass-border); display: flex; align-items: center; gap: 0.5rem;">
+          <i data-lucide="user" style="width: 18px;"></i> Mi Perfil
+        </button>
+        <button id="logout-btn" style="width: auto; padding: 0.5rem 1rem; background: var(--surface); border: 1px solid var(--glass-border); display: flex; align-items: center; gap: 0.5rem;">
+          <i data-lucide="log-out" style="width: 18px;"></i> Salir
+        </button>
+      </div>
+    </header>
+
+    <div id="main-content">
+      <main class="dashboard-grid animate-in">
+        <div class="card glass">
+          <h3 class="card-title" style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="map-pin" style="color: var(--secondary);"></i> Fichaje</h3>
+          <p style="margin-bottom: 1.5rem; color: var(--text-muted);">Verificando ubicación...</p>
+          <button id="clock-in-btn" disabled>Cargando ubicación...</button>
+        </div>
+
+        <div class="card glass" id="stats-card">
+          <h3 class="card-title" style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="bar-chart-3" style="color: var(--primary-light);"></i> Resumen Mensual</h3>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: -0.5rem; margin-bottom: 2rem;">Objetivo: <strong>${standardHours}h</strong> diarias</p>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; text-align: center; margin-bottom: 1rem;">
+            <div>
+              <p class="stat-label">Asistencias</p>
+              <p id="count-present" class="stat-value">--</p>
+            </div>
+            <div>
+              <p class="stat-label">Tardanzas</p>
+              <p id="count-late" class="stat-value" style="background: linear-gradient(135deg, #ff9900 0%, #ffcc00 100%); -webkit-background-clip: text;">--</p>
+            </div>
+            <div>
+              <p class="stat-label">Faltas</p>
+              <p id="count-absent" class="stat-value" style="background: linear-gradient(135deg, #ef4444 0%, #f87171 100%); -webkit-background-clip: text;">--</p>
+            </div>
+          </div>
+          <button id="view-stats-btn" style="background: var(--surface); border: 1px solid var(--glass-border); width: 100%; font-size: 0.8rem; padding: 0.5rem;">
+            Ver Detalles e Historial
+          </button>
+        </div>
+
+        <div class="card glass">
+          <h3 class="card-title" style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="calendar" style="color: var(--success);"></i> Licencias y Permisos</h3>
+          <div id="licenses-list" style="margin-bottom: 1rem; max-height: 250px; overflow-y: auto; padding-right: 0.5rem;">
+            <p style="color: var(--text-muted); font-size: 0.875rem;">Cargando...</p>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <button id="view-full-history-btn" style="background: var(--surface); border: 1px solid var(--glass-border); width: 100%; font-size: 0.8rem; padding: 0.5rem;">
+              Ver Historial Detallado
+            </button>
+            <button id="request-auth-btn" style="background: var(--surface); border: 1px solid var(--glass-border); display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-size: 0.875rem;">
+              <i data-lucide="file-text" style="width: 18px;"></i> Solicitar Permiso
+            </button>
+          </div>
+        </div>
+      </main>
+
+      ${['director', 'vicedirector', 'rrhh'].includes(profile?.role) ? renderAdminSection() : ''}
+    </div>
+  `;
+
+  document.querySelector('#logout-btn').addEventListener('click', () => supabase.auth.signOut());
+  document.querySelector('#profile-btn').addEventListener('click', () => renderProfile(document.querySelector('#main-content'), profile));
+  document.querySelector('#view-stats-btn').addEventListener('click', () => renderUserStats(document.querySelector('#main-content'), session.user.id));
+  
+  if (['director', 'vicedirector', 'rrhh'].includes(profile?.role)) {
+    document.querySelector('#nav-abm')?.addEventListener('click', () => renderABM(document.querySelector('#main-content')));
+    document.querySelector('#nav-auths')?.addEventListener('click', () => renderAuthorizations(document.querySelector('#main-content')));
+    document.querySelector('#nav-holidays')?.addEventListener('click', () => renderHolidays(document.querySelector('#main-content')));
+    document.querySelector('#nav-daily')?.addEventListener('click', () => renderDailyReports(document.querySelector('#main-content'), settings));
+    document.querySelector('#nav-reports')?.addEventListener('click', () => renderAdvancedReports(document.querySelector('#main-content')));
+    document.querySelector('#nav-settings')?.addEventListener('click', () => renderAdminSettings(document.querySelector('#main-content'), settings));
+    document.querySelector('#nav-logs')?.addEventListener('click', () => renderLogs(document.querySelector('#main-content')));
+    document.querySelector('#nav-security')?.addEventListener('click', () => renderSecurityPanel(document.querySelector('#main-content')));
+    document.querySelector('#nav-analytics')?.addEventListener('click', () => renderAnalytics(document.querySelector('#main-content'), settings));
+  }
+  document.querySelector('#notif-bell')?.addEventListener('click', () => showNotificationsModal());
+  
+  // Auto-check notifications
+  checkNotifications();
+
+  app.addEventListener('click', (e) => {
+    if (e.target.id === 'back-to-dash') {
+      renderDashboard();
+    }
+  });
+
+  document.querySelector('#request-auth-btn').addEventListener('click', renderRequestForm);
+  document.querySelector('#view-full-history-btn').addEventListener('click', () => renderUserAuthHistory(document.querySelector('#main-content')));
+  
+  initClockIn();
+  fetchStats();
+  fetchAuths();
+  if (['director', 'vicedirector', 'rrhh'].includes(profile?.role)) {
+    fetchAdminAlerts();
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
+
+/**
+ * Fetches user authorizations/licenses
+ */
+async function fetchAuths() {
+  const container = document.querySelector('#licenses-list');
+  if (!container) return;
+
+  const { data: auths, error } = await supabase
+    .from('authorizations')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .order('start_date', { ascending: false })
+    .limit(20);
+
+  if (error) {
+    container.innerHTML = `<p style="color: var(--danger); font-size: 0.8rem;">Error: ${error.message}</p>`;
+    return;
+  }
+
+  if (!auths || auths.length === 0) {
+    container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.875rem; padding: 1rem; text-align: center;">No tienes pedidos registrados.</p>';
+    return;
+  }
+
+  function safeFormatDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const isoStr = dateStr.includes('T') ? dateStr : `${dateStr}T00:00:00`;
+      const d = new Date(isoStr);
+      return isNaN(d.getTime()) ? 'Invalid' : d.toLocaleDateString();
+    } catch (e) {
+      return 'Error';
+    }
+  }
+
+  container.innerHTML = `
+    ${auths.map(a => `
+      <div class="card glass" style="padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(255,255,255,0.03);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <div style="font-weight: 600; font-size: 0.875rem;">${a.type}</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">${safeFormatDate(a.start_date || a.date)} ${a.end_date ? ' al ' + safeFormatDate(a.end_date) : ''}</div>
+            ${a.admin_notes ? `<div style="font-size: 0.75rem; color: var(--secondary); margin-top: 0.25rem; font-style: italic;">R: ${a.admin_notes}</div>` : ''}
+          </div>
+          <div style="text-align: right;">
+            <span class="badge badge-${a.status}" style="font-size: 0.65rem;">${a.status.toUpperCase()}</span>
+            ${a.status === 'pending' ? `
+              <div style="margin-top: 0.5rem; display: flex; gap: 0.4rem; justify-content: flex-end;">
+                <button class="edit-auth-btn" data-id="${a.id}" title="Editar" style="width: auto; padding: 0.3rem; background: var(--surface); border: none; font-size: 0.7rem; border-radius: 4px; color: var(--text); cursor: pointer;"><i data-lucide="edit-3" style="width: 14px;"></i></button>
+                <button class="cancel-auth-btn" data-id="${a.id}" title="Cancelar" style="width: auto; padding: 0.3rem; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: none; font-size: 0.7rem; border-radius: 4px; cursor: pointer;"><i data-lucide="trash-2" style="width: 14px;"></i></button>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+
+  // Attach events
+  container.querySelectorAll('.cancel-auth-btn').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      if (confirm('¿Estás seguro de cancelar este pedido?')) {
+        const { error: delErr } = await supabase.from('authorizations').delete().eq('id', btn.dataset.id);
+        if (delErr) showNotification(delErr.message, 'error');
+        else {
+          showNotification('Pedido cancelado', 'success');
+          fetchAuths();
+        }
+      }
+    };
+  });
+
+  container.querySelectorAll('.edit-auth-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const auth = auths.find(a => a.id === btn.dataset.id);
+      if (auth) {
+        renderRequestForm();
+        setTimeout(() => {
+          document.querySelector('#auth-id').value = auth.id;
+          document.querySelector('#auth-type').value = auth.type;
+          document.querySelector('#auth-notes').value = auth.notes || '';
+          document.querySelector('#auth-start').value = auth.start_date;
+          document.querySelector('#auth-end').value = auth.end_date || '';
+          document.querySelector('h2').textContent = 'Editar Solicitud de Permiso';
+          document.querySelector('button[type="submit"]').textContent = 'Actualizar Pedido';
+        }, 50);
+      }
+    };
+  });
+
+  if (window.lucide) window.lucide.createIcons();
+}
+
+/**
+ * Fetches critical items for the Admin/Director dashboard
+ */
+async function fetchAdminAlerts() {
+  const container = document.querySelector('#admin-alerts-container');
+  if (!container) return;
+
+  const today = new Date().toISOString().split('T')[0];
+  const dayOfWeek = new Date().getDay() === 0 ? 7 : new Date().getDay();
+
+  // 1. Get all profiles + schedules for today
+  const { data: profiles } = await supabase.from('profiles').select('id, first_name, last_name');
+  const { data: schedules } = await supabase.from('user_schedules').select('user_id').eq('day_of_week', dayOfWeek);
+  
+  // 2. Get attendance and auths for today
+  const { data: attendance } = await supabase.from('attendance')
+    .select('user_id')
+    .gte('check_in', `${today}T00:00:00.000Z`)
+    .lte('check_in', `${today}T23:59:59.999Z`);
+    
+  const { data: auths } = await supabase.from('authorizations')
+    .select('user_id, start_date, end_date')
+    .eq('status', 'approved');
+
+  const expectedIds = new Set(schedules?.map(s => s.user_id) || []);
+  const attendingIds = new Set(attendance?.map(a => a.user_id) || []);
+  
+  // Custom filter for authorized IDs on 'today'
+  const authorizedIds = new Set(
+    auths?.filter(a => {
+      const start = a.start_date;
+      const end = a.end_date || a.start_date;
+      return today >= start && today <= end;
+    }).map(a => a.user_id) || []
+  );
+  // 3. Get pending authorizations count for badge (always run for admins)
+  const { count: pendingCount } = await supabase.from('authorizations')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending');
+
+  updateAdminBadge(pendingCount || 0);
+
+  const missingIds = Array.from(expectedIds).filter(id => !attendingIds.has(id) && !authorizedIds.has(id));
+  const missingProfiles = profiles?.filter(p => missingIds.includes(p.id)) || [];
+  
+  if (missingProfiles.length > 0) {
+    container.innerHTML = `
+      <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); padding: 1rem; border-radius: 8px; margin-bottom: 2rem;">
+        <h4 style="color: var(--danger); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <i data-lucide="alert-triangle"></i> Ausencias Críticas Hoy (${missingProfiles.length})
+        </h4>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Personal que debería haber fichado hoy y no lo hizo:</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem;">
+          ${missingProfiles.map(p => `
+            <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-weight: 500; font-size: 0.85rem;">${p.last_name}, ${p.first_name}</span>
+              <i data-lucide="user-minus" style="width: 14px; color: var(--danger);"></i>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `
+      <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid var(--success); padding: 1rem; border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; color: #4ade80; margin-bottom: 2rem;">
+        <i data-lucide="check-circle" style="width: 20px;"></i>
+        <span>No hay ausencias críticas hoy. Todos los esperados están presentes o autorizados.</span>
+      </div>
+    `;
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
+
+/**
+ * Updates the visual badge for pending authorizations
+ */
+function updateAdminBadge(count) {
+  const badge = document.querySelector('#pending-auths-badge');
+  if (!badge) return;
+
+  if (count > 0) {
+    badge.textContent = count > 9 ? '9+' : count;
+    badge.style.display = 'flex';
+    badge.classList.add('pulse');
+  } else {
+    badge.style.display = 'none';
+    badge.classList.remove('pulse');
+  }
+}
+
+/**
+ * Renders a full-screen view of the user's authorization history with filters and sorting
+ */
+async function renderUserAuthHistory(container) {
+  let allAuths = [];
+  let sortConfig = { key: 'start_date', direction: 'desc' };
+  
+  container.innerHTML = `
+    <div class="animate-in">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h2 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="history"></i> Mi Historial de Licencias</h2>
+        <button id="back-to-dash" class="btn-secondary" style="width: auto;">Volver al Dashboard</button>
+      </div>
+
+      <div class="card glass" style="margin-bottom: 1.5rem; padding: 1.25rem;">
+        <div style="display: grid; grid-template-columns: 1.5fr 1.5fr 1fr auto; gap: 1rem; align-items: end;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; margin-bottom: 0.3rem;">Desde</label>
+            <input type="date" id="history-from" style="padding: 0.6rem;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; margin-bottom: 0.3rem;">Hasta</label>
+            <input type="date" id="history-to" style="padding: 0.6rem;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; margin-bottom: 0.3rem;">Estado</label>
+            <select id="history-status" style="padding: 0.6rem;">
+              <option value="all">Todos</option>
+              <option value="pending">Pendientes</option>
+              <option value="approved">Aprobadas</option>
+              <option value="rejected">Rechazadas</option>
+            </select>
+          </div>
+          <button id="clear-history-filters" title="Limpiar Filtros" style="width: auto; padding: 0.6rem; background: var(--surface); border: 1px solid var(--glass-border); color: var(--text-muted);">
+            <i data-lucide="filter-x" style="width: 18px;"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="card glass" style="padding: 0; overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left;">
+          <thead>
+            <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--glass-border);">
+              <th class="sortable" data-key="type" style="padding: 1rem; cursor: pointer;">Tipo <i data-lucide="chevrons-up-down" style="width: 14px; opacity: 0.5;"></i></th>
+              <th class="sortable" data-key="start_date" style="padding: 1rem; cursor: pointer;">Desde <i data-lucide="chevrons-up-down" style="width: 14px; opacity: 0.5;"></i></th>
+              <th class="sortable" data-key="end_date" style="padding: 1rem; cursor: pointer;">Hasta <i data-lucide="chevrons-up-down" style="width: 14px; opacity: 0.5;"></i></th>
+              <th class="sortable" data-key="status" style="padding: 1rem; cursor: pointer;">Estado <i data-lucide="chevrons-up-down" style="width: 14px; opacity: 0.5;"></i></th>
+              <th style="padding: 1rem;">Observaciones</th>
+            </tr>
+          </thead>
+          <tbody id="user-history-body">
+            <tr><td colspan="5" style="padding: 2rem; text-align: center;">Cargando historial...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  if (window.lucide) window.lucide.createIcons();
+
+  const { data, error } = await supabase
+    .from('authorizations')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .order('start_date', { ascending: false });
+
+  if (error) {
+    document.querySelector('#user-history-body').innerHTML = `<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--danger);">Error: ${error.message}</td></tr>`;
+    return;
+  }
+  allAuths = data;
+
+  function renderTable() {
+    const tbody = document.querySelector('#user-history-body');
+    const from = document.querySelector('#history-from').value;
+    const to = document.querySelector('#history-to').value;
+    const status = document.querySelector('#history-status').value;
+
+    let filtered = allAuths.filter(a => {
+      const date = a.start_date || a.date;
+      const statusMatch = status === 'all' || a.status === status;
+      const dateMatch = (!from || date >= from) && (!to || date <= to);
+      return statusMatch && dateMatch;
+    });
+
+    // Sorting logic
+    filtered.sort((a, b) => {
+      let valA = a[sortConfig.key] || '';
+      let valB = b[sortConfig.key] || '';
+      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">No se encontraron registros.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(a => `
+      <tr style="border-bottom: 1px solid var(--glass-border);">
+        <td style="padding: 1rem; font-weight: 500;">${a.type}</td>
+        <td style="padding: 1rem;">${safeFormatDate(a.start_date || a.date)}</td>
+        <td style="padding: 1rem;">${safeFormatDate(a.end_date)}</td>
+        <td style="padding: 1rem;">
+          <span class="badge badge-${a.status}">${a.status.toUpperCase()}</span>
+        </td>
+        <td style="padding: 1rem; font-size: 0.8rem; color: var(--text-dim); max-width: 250px;">
+        <div>${a.notes || '---'}</div>
+        ${a.admin_notes ? `<div style="margin-top: 0.5rem; color: var(--secondary); font-weight: 500;">R: ${a.admin_notes}</div>` : ''}
+      </td>
+    </tr>
+  `).join('');
+  }
+
+  function safeFormatDate(dateStr) {
+    if (!dateStr) return '---';
+    try {
+      const isoStr = dateStr.includes('T') ? dateStr : `${dateStr}T00:00:00`;
+      const d = new Date(isoStr);
+      return isNaN(d.getTime()) ? 'Invalid' : d.toLocaleDateString();
+    } catch (e) {
+      return 'Err';
+    }
+  }
+
+  // Events
+  document.querySelector('#history-from').onchange = renderTable;
+  document.querySelector('#history-to').onchange = renderTable;
+  document.querySelector('#history-status').onchange = renderTable;
+  document.querySelector('#clear-history-filters').onclick = () => {
+    document.querySelector('#history-from').value = '';
+    document.querySelector('#history-to').value = '';
+    document.querySelector('#history-status').value = 'all';
+    renderTable();
+  };
+
+  document.querySelectorAll('.sortable').forEach(th => {
+    th.onclick = () => {
+      const key = th.dataset.key;
+      if (sortConfig.key === key) {
+        sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortConfig.key = key;
+        sortConfig.direction = 'asc';
+      }
+      renderTable();
+    };
+  });
+
+  renderTable();
+}
+
+function renderRequestForm() {
+  const container = document.querySelector('#main-content');
+  container.innerHTML = `
+    <div class="animate-in card glass" style="max-width: 500px; margin: 0 auto;">
+      <h2 style="margin-bottom: 1.5rem;"><i data-lucide="file-text"></i> Nueva Solicitud de Permiso</h2>
+      <form id="auth-request-form">
+        <input type="hidden" id="auth-id" value="">
+        <div class="form-group">
+          <label>Motivo / Tipo</label>
+          <select id="auth-type" required>
+            <option value="Examen">Examen</option>
+            <option value="Atención Familiar">Atención Familiar</option>
+            <option value="Examen">Examen / Estudio</option>
+            <option value="Media Jornada">Media Jornada (Art. 87)</option>
+            <option value="Salida Excepcional">Salida Excepcional (2hs max)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Fecha de Inicio</label>
+          <input type="date" id="auth-start" required>
+        </div>
+        <div class="form-group">
+          <label>Fecha de Fin (opcional)</label>
+          <input type="date" id="auth-end">
+        </div>
+        <div class="form-group">
+          <label>Observaciones / Justificación</label>
+          <textarea id="auth-notes" placeholder="Detalles adicionales..." style="width: 100%; padding: 0.75rem; background: var(--surface); color: white; border: 1px solid var(--glass-border); border-radius: 8px; min-height: 80px;"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Adjuntar Certificado (Opcional)</label>
+          <input type="file" id="auth-attachment" accept=".pdf,.jpg,.png,.jpeg" style="padding: 0.5rem; background: rgba(255,255,255,0.05);">
+          <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem;">Formato admitido: PDF, JPG, PNG (Max 5MB)</p>
+        </div>
+        <div id="upload-status" style="display: none; font-size: 0.8rem; color: var(--secondary); margin-bottom: 1rem;">
+          <i data-lucide="loader" class="spin" style="width: 14px; vertical-align: middle;"></i> Subiendo archivo...
+        </div>
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+          <button type="submit" style="background: var(--accent-gradient);">Enviar Solicitud</button>
+          <button type="button" id="back-to-dash" style="background: var(--surface);">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.querySelector('#auth-request-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    const id = document.querySelector('#auth-id').value;
+    const type = document.querySelector('#auth-type').value;
+    const notes = document.querySelector('#auth-notes').value;
+    const startDate = document.querySelector('#auth-start').value;
+    const endDate = document.querySelector('#auth-end').value;
+
+    const fileInput = document.querySelector('#auth-attachment');
+    const uploadStatus = document.querySelector('#upload-status');
+    const file = fileInput.files[0];
+
+    if (!startDate) {
+      showNotification('Por favor ingresa una fecha de inicio.', 'error');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Procesando...';
+
+    let attachmentPath = null;
+    
+    // Handle File Upload
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        showNotification('El archivo es demasiado grande (máx 5MB).', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Enviar Solicitud';
+        return;
+      }
+
+      uploadStatus.style.display = 'block';
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${session.user.id}/${Date.now()}.${fileExt}`;
+      const filePath = `certificates/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('certificates')
+        .upload(fileName, file);
+
+      if (uploadError) {
+        console.warn('Storage upload failed (bucket might not exist):', uploadError);
+        // Fallback or warning: we'll continue but notify
+        showNotification('No se pudo subir el adjunto (Servidor no configurado). Se enviará solo el texto.', 'warning');
+      } else {
+        attachmentPath = fileName;
+      }
+      uploadStatus.style.display = 'none';
+    }
+
+    const payload = {
+      type,
+      notes,
+      start_date: startDate,
+      end_date: endDate || null,
+      status: 'pending',
+      metadata: { 
+        attachment_path: attachmentPath,
+        updated_at: new Date().toISOString()
+      }
+    };
+
+    let result;
+    if (id) {
+      result = await supabase.from('authorizations').update(payload).eq('id', id);
+    } else {
+      payload.user_id = session.user.id;
+      result = await supabase.from('authorizations').insert(payload);
+    }
+
+    if (result.error) {
+      showNotification(result.error.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Enviar Solicitud';
+    } else {
+      showNotification(id ? 'Pedido actualizado' : 'Solicitud enviada con éxito', 'success');
+      renderDashboard();
+    }
+  });
+
+  if (window.lucide) window.lucide.createIcons();
+}
+
+async function fetchStats() {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  const { data: attendance } = await supabase
+    .from('attendance')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .gte('check_in', firstDay);
+
+  if (attendance) {
+    const present = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
+    const late = attendance.filter(a => a.is_late).length;
+    
+    document.querySelector('#count-present').textContent = present;
+    document.querySelector('#count-late').textContent = late;
+    document.querySelector('#count-absent').textContent = '0';
+  }
+
+  const { data: licenses } = await supabase
+    .from('authorizations')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .gte('start_date', now.toISOString())
+    .limit(3);
+
+  const licenseEl = document.querySelector('#licenses-list');
+  if (licenses?.length > 0) {
+    licenseEl.innerHTML = licenses.map(l => `
+      <div style="margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(255,255,255,0.05); border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <p style="font-size: 0.875rem;">${l.type}</p>
+          <p style="font-size: 0.75rem; color: var(--text-muted);">${new Date(l.start_date).toLocaleDateString()}</p>
+        </div>
+        ${l.status === 'approved' ? `
+          <button class="download-ics" data-title="${l.type}" data-date="${l.start_date}" data-notes="${l.notes || ''}" style="width: auto; padding: 0.25rem; background: transparent; border: none; color: var(--success);" title="Agregar al calendario">
+            <i data-lucide="calendar-plus" style="width: 18px;"></i>
+          </button>
+        ` : `<span style="font-size: 0.65rem; color: var(--text-dim);">${l.status.toUpperCase()}</span>`}
+      </div>
+    `).join('');
+
+    licenseEl.querySelectorAll('.download-ics').forEach(btn => {
+      btn.onclick = () => {
+        const { title, date, notes } = btn.dataset;
+        downloadICS(`Licencia: ${title}`, notes, date);
+      };
+    });
+  } else {
+    licenseEl.innerHTML = '<p style="color: var(--text-muted); font-size: 0.875rem;">No tienes licencias programadas.</p>';
+  }
+}
+
+function renderAdminSection() {
+  return `
+    <section style="margin-top: 3rem;">
+      <div id="admin-alerts-container"></div>
+      <h2 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="shield-check"></i> Panel de Administración</h2>
+      <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+        
+        <div class="card glass" style="border-top: 4px solid var(--accent);">
+          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="bar-chart-3"></i> Analitícas Avanzadas</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0;">Estadísticas generales y tendencias de asistencia.</p>
+          <button id="nav-analytics" style="margin-top: 1rem; background: var(--surface);">Ver Gráficos</button>
+        </div>
+
+        <div class="card glass" style="border-top: 4px solid var(--primary-light);">
+          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="users"></i> Gestión de Personal</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0;">Alta, baja y modificación de usuarios.</p>
+          <button id="nav-abm" style="margin-top: 1rem; background: var(--surface);">Abrir ABM</button>
+        </div>
+
+        <div class="card glass" style="border-top: 4px solid var(--secondary);">
+          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="clipboard-check"></i> Autorizaciones Pendientes</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0;">Aprobar o rechazar permisos.</p>
+          <div style="position: relative; display: inline-block; width: 100%;">
+            <button id="nav-auths" style="margin-top: 1rem; background: var(--surface); width: 100%;">Ver Solicitudes</button>
+            <span id="pending-auths-badge" class="badge-notification" style="display: none; position: absolute; top: 0; right: -5px; background: var(--danger); color: white; border-radius: 50%; width: 22px; height: 22px; font-size: 0.7rem; font-weight: bold; align-items: center; justify-content: center; border: 2px solid var(--surface); z-index: 10;">0</span>
+          </div>
+        </div>
+
+        <div class="card glass" style="border-top: 4px solid var(--success);">
+          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="clipboard-list"></i> Partes Diarios</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0;">Cierre y validación de asistencia diaria.</p>
+          <button id="nav-daily" style="margin-top: 1rem; background: var(--surface);">Abrir Parte</button>
+        </div>
+
+        <div class="card glass" style="border-top: 4px solid var(--warning);">
+          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="calendar"></i> Gestión de Feriados</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0;">Configura días no laborables y asuetos.</p>
+          <button id="nav-holidays" style="margin-top: 1rem; background: var(--surface);">Calendario</button>
+        </div>
+
+        <div class="card glass" style="border-top: 4px solid var(--danger);">
+          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="shield-alert"></i> Área de Seguridad</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0;">¿Quién está en el edificio ahora?</p>
+          <button id="nav-security" style="margin-top: 1rem; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2);">Abrir Panel</button>
+        </div>
+
+        <div class="card glass" style="border-top: 4px solid var(--secondary);">
+          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="scroll-text"></i> Auditoría</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0;">Ver registro de acciones del sistema.</p>
+          <button id="nav-logs" style="margin-top: 1rem; background: var(--surface);">Ver Logs</button>
+        </div>
+
+        <div class="card glass" style="border-top: 4px solid var(--primary);">
+          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="settings"></i> Configuración</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0;">Ajustes globales, ubicación y reglas de negocio.</p>
+          <button id="nav-settings" style="margin-top: 1rem; background: var(--surface);">Configurar Sistema</button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+async function initClockIn() {
+  const btn = document.querySelector('#clock-in-btn');
+  const statusText = btn.previousElementSibling;
+  
+  try {
+    const pos = await getCurrentPosition();
+    const config = settings?.school_location;
+    
+    if (!config || !config.lat) {
+      throw new Error('Configuración de ubicación no disponible.');
+    }
+
+    const distance = calculateDistance(pos.lat, pos.long, config.lat, config.lng);
+
+    if (distance <= config.radius_meters) {
+      statusText.textContent = `📍 Estás a ${Math.round(distance)}m. Ubicación validada.`;
+      statusText.style.color = 'var(--success)';
+      
+      const { data: lastRecord } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .is('check_out', null)
+        .order('check_in', { ascending: false })
+        .limit(1)
+        .single();
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const isLastRecordToday = lastRecord && lastRecord.check_in.split('T')[0] === todayStr;
+
+      if (lastRecord && isLastRecordToday) {
+        btn.textContent = 'Fichar Salida';
+        btn.onclick = () => handleClockOut(lastRecord.id);
+      } else {
+        if (lastRecord && !isLastRecordToday) {
+          statusText.innerHTML += `<br><span style="font-size: 0.75rem; color: var(--warning); opacity: 0.8;">⚠️ Olvido de salida detectado (${new Date(lastRecord.check_in).toLocaleDateString()}). Puedes fichar entrada hoy normalmente.</span>`;
+        }
+        btn.textContent = 'Fichar Entrada';
+        btn.onclick = () => handleClockIn(pos);
+      }
+      btn.disabled = false;
+    } else {
+      statusText.textContent = `🚫 Estás a ${Math.round(distance)}m. Debes estar en las inmediaciones para fichar.`;
+      statusText.style.color = 'var(--danger)';
+      btn.textContent = 'Fuera de Rango';
+      btn.disabled = true;
+      showNotification('Estás fuera del rango permitido para marcar asistencia.', 'error');
+    }
+  } catch (err) {
+    let msg = err.message;
+    if (msg.includes('Secure Origins') || msg.includes('secure origin')) {
+      msg = 'La geolocalización requiere una conexión segura (HTTPS). Usa Localhost o un túnel HTTPS para móviles.';
+    }
+    if (statusText) {
+      statusText.textContent = `❌ Error: ${msg}`;
+      statusText.style.color = 'var(--danger)';
+    }
+    if (btn) btn.textContent = 'Error de Ubicación';
+    showNotification('Error al obtener ubicación: ' + msg, 'error');
+  }
+}
+
+async function handleClockIn(pos) {
+  const btn = document.querySelector('#clock-in-btn');
+  btn.disabled = true;
+  btn.textContent = 'Fichando...';
+
+  const entryTime = new Date();
+  const dayOfWeek = entryTime.getDay();
+  
+  const { data: schedule } = await supabase
+    .from('user_schedules')
+    .select('start_time')
+    .eq('user_id', session.user.id)
+    .eq('day_of_week', dayOfWeek)
+    .single();
+
+  let isLate = false;
+  const rules = settings?.business_rules;
+  const tolerance = rules?.tolerance_minutes || 15;
+
+  if (schedule) {
+    const [h, m] = schedule.start_time.split(':');
+    const scheduledEntry = new Date();
+    scheduledEntry.setHours(parseInt(h), parseInt(m), 0, 0);
+    const toleranceLimit = new Date(scheduledEntry.getTime() + tolerance * 60000);
+    isLate = entryTime > toleranceLimit;
+  } else {
+    const standardHour = 8;
+    const standardEntry = new Date();
+    standardEntry.setHours(standardHour, 0, 0, 0);
+    const toleranceLimit = new Date(standardEntry.getTime() + tolerance * 60000);
+    isLate = entryTime > toleranceLimit;
+  }
+
+  const { error } = await supabase.from('attendance').insert({
+    user_id: session.user.id,
+    check_in: entryTime.toISOString(),
+    lat: pos.lat,
+    long: pos.long,
+    is_late: isLate,
+    status: isLate ? 'late' : 'present'
+  });
+
+  if (error) {
+    showNotification('Error al fichar entrada: ' + error.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Fichar Entrada';
+  } else {
+    showNotification('Entrada registrada con éxito.', 'success');
+    initClockIn();
+    fetchStats();
+  }
+}
+
+async function handleClockOut(id) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay animate-in';
+  modal.innerHTML = `
+    <div class="card glass modal-content" style="max-width: 450px; text-align: center;">
+      <h3 style="margin-bottom: 0.5rem;">🎉 ¡Excelente jornada!</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem;">¿Cómo calificarías tu día hoy?</p>
+      
+      <div style="display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 2rem;">
+        <button class="mood-btn" data-mood="excellent" style="background: transparent; border: 2px solid transparent; flex: 1; padding: 0.5rem; border-radius: 12px; transition: all 0.3s;">
+          <div style="font-size: 2rem;">🤩</div>
+          <span style="font-size: 0.7rem; color: var(--text-dim);">Excelente</span>
+        </button>
+        <button class="mood-btn" data-mood="good" style="background: transparent; border: 2px solid transparent; flex: 1; padding: 0.5rem; border-radius: 12px; transition: all 0.3s;">
+          <div style="font-size: 2rem;">😊</div>
+          <span style="font-size: 0.7rem; color: var(--text-dim);">Bien</span>
+        </button>
+        <button class="mood-btn" data-mood="neutral" style="background: transparent; border: 2px solid transparent; flex: 1; padding: 0.5rem; border-radius: 12px; transition: all 0.3s;">
+          <div style="font-size: 2rem;">😐</div>
+          <span style="font-size: 0.7rem; color: var(--text-dim);">Normal</span>
+        </button>
+        <button class="mood-btn" data-mood="tired" style="background: transparent; border: 2px solid transparent; flex: 1; padding: 0.5rem; border-radius: 12px; transition: all 0.3s;">
+          <div style="font-size: 2rem;">😫</div>
+          <span style="font-size: 0.7rem; color: var(--text-dim);">Cansado</span>
+        </button>
+        <button class="mood-btn" data-mood="stressed" style="background: transparent; border: 2px solid transparent; flex: 1; padding: 0.5rem; border-radius: 12px; transition: all 0.3s;">
+          <div style="font-size: 2rem;">🤯</div>
+          <span style="font-size: 0.7rem; color: var(--text-dim);">Estresado</span>
+        </button>
+      </div>
+
+      <div class="form-group" style="text-align: left;">
+        <label style="font-size: 0.8rem; opacity: 0.7;">Comentario opcional (¿Algo que quieras destacar?)</label>
+        <textarea id="mood-note" placeholder="Escribe aquí..." style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); width: 100%; min-height: 80px; margin-top: 0.5rem; color: white;"></textarea>
+      </div>
+
+      <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+        <button id="skip-mood" style="flex: 1; background: var(--surface); border: 1px solid var(--glass-border);">Omitir y Fichar</button>
+        <button id="save-mood" style="flex: 1; background: var(--accent-gradient);" disabled>Registrar Salida</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  let selectedMood = null;
+
+  const moodBtns = modal.querySelectorAll('.mood-btn');
+  moodBtns.forEach(btn => {
+    btn.onclick = () => {
+      moodBtns.forEach(b => b.style.borderColor = 'transparent');
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.background = 'rgba(255,255,255,0.05)';
+      selectedMood = btn.dataset.mood;
+      modal.querySelector('#save-mood').disabled = false;
+    }
+  });
+
+  const performClockOut = async (mood = null, note = '') => {
+    const btnMain = document.querySelector('#clock-in-btn');
+    btnMain.disabled = true;
+    btnMain.textContent = 'Fichando...';
+    modal.remove();
+
+    const { error } = await supabase.from('attendance')
+      .update({ 
+        check_out: new Date().toISOString(),
+        mood: mood,
+        mood_note: note
+      })
+      .eq('id', id);
+
+    if (error) {
+      showNotification('Error al fichar salida: ' + error.message, 'error');
+      btnMain.disabled = false;
+      btnMain.textContent = 'Fichar Salida';
+    } else {
+      showNotification('Salida registrada. ¡Que descanses!', 'success');
+      initClockIn();
+    }
+  };
+
+  modal.querySelector('#skip-mood').onclick = () => performClockOut();
+  modal.querySelector('#save-mood').onclick = () => {
+    const note = modal.querySelector('#mood-note').value;
+    performClockOut(selectedMood, note);
+  };
+}
+
+/**
+ * Checks for recent status changes in user's authorizations
+ */
+async function checkNotifications() {
+  if (!session) return;
+  const lastCheck = localStorage.getItem(`last_notif_check_${session.user.id}`) || new Date(0).toISOString();
+  
+  const { data: recentChanges } = await supabase
+    .from('authorizations')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .neq('status', 'pending')
+    .gt('metadata->updated_at', lastCheck);
+
+  const countEl = document.querySelector('#notif-count');
+  if (recentChanges?.length > 0 && countEl) {
+    countEl.textContent = recentChanges.length;
+    countEl.style.display = 'flex';
+    countEl.classList.add('pulse');
+    
+    showNotification(`Tienes ${recentChanges.length} novedades en tus solicitudes.`, 'info');
+  }
+
+  // Also run clock-out reminder
+  clockOutReminder();
+}
+
+/**
+ * Shows a modal with recent notification details
+ */
+async function showNotificationsModal() {
+  const { data: recentChanges } = await supabase
+    .from('authorizations')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .neq('status', 'pending')
+    .order('metadata->updated_at', { ascending: false })
+    .limit(5);
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="card glass modal-content" style="max-width: 400px; width: 90%;">
+      <h3 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        <i data-lucide="bell"></i> Novedades Recientes
+      </h3>
+      <div id="notif-list" style="margin-bottom: 1.5rem; max-height: 400px; overflow-y: auto;">
+        ${recentChanges?.length > 0 ? recentChanges.map(n => `
+          <div style="padding: 1rem; border-bottom: 1px solid var(--glass-border); margin-bottom: 0.5rem; background: rgba(255,255,255,0.02); border-radius: 8px;">
+            <p style="font-weight: bold; font-size: 0.9rem;">${n.type}</p>
+            <p style="font-size: 0.8rem; margin: 0.25rem 0;">Estado: <span class="badge badge-${n.status}">${n.status.toUpperCase()}</span></p>
+            ${n.admin_notes ? `<p style="font-size: 0.75rem; color: var(--secondary); margin-top: 0.25rem; background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 4px;">"${n.admin_notes}"</p>` : ''}
+            <p style="font-size: 0.65rem; color: var(--text-dim); margin-top: 0.5rem;">Resuelto el ${new Date(n.metadata?.updated_at).toLocaleString()}</p>
+          </div>
+        `).join('') : '<p style="color: var(--text-muted); text-align: center; padding: 1rem;">No hay novedades recientes.</p>'}
+      </div>
+      <button id="close-notif" style="width: 100%; background: var(--surface);">Cerrar y marcar como leídas</button>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  if (window.lucide) window.lucide.createIcons();
+
+  document.querySelector('#close-notif').onclick = () => {
+    localStorage.setItem(`last_notif_check_${session.user.id}`, new Date().toISOString());
+    const countEl = document.querySelector('#notif-count');
+    if (countEl) countEl.style.display = 'none';
+    modal.remove();
+  };
+}
+
+/**
+ * Reminds the user if they forgot to clock out
+ */
+async function clockOutReminder() {
+  if (!session) return;
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  if (currentHour < 13) return; 
+
+  const { data: activeRecord } = await supabase
+    .from('attendance')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .is('check_out', null)
+    .gte('check_in', new Date().toISOString().split('T')[0] + 'T00:00:00')
+    .maybeSingle();
+
+  if (activeRecord) {
+    const entryTime = new Date(activeRecord.check_in);
+    const hoursElapsed = (now - entryTime) / (1000 * 60 * 60);
+    
+    if (hoursElapsed > 9) {
+      showNotification('⚠️ Recordatorio: Sigues con el fichaje de entrada activo. ¿Olvidaste fichar la salida?', 'warning');
+    }
+  }
+}
+
+// Initialize application
+init();

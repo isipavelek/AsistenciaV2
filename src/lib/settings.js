@@ -29,8 +29,13 @@ export async function getSettings() {
   }, {});
 
   // Ensure mandatory keys exist with defaults if missing
+  const currentYear = new Date().getFullYear();
   const finalSettings = {
     school_location: settingsObj.school_location || { lat: -34.4578, lng: -58.9100, radius_meters: 100 },
+    attendance_period: settingsObj.attendance_period || { 
+      start_date: `${currentYear}-03-01`, 
+      end_date: `${currentYear}-12-20` 
+    },
     business_rules: settingsObj.business_rules || { 
       tolerance_minutes: 15, 
       max_late_justifications_month: 3,

@@ -29,6 +29,23 @@ export async function renderUserSchedules(container, userId, userName) {
         </button>
       </div>
 
+      <div class="card glass" style="margin-bottom: 2rem; border-color: var(--primary-light);">
+        <h3 style="display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; margin-bottom: 1rem;">
+          <i data-lucide="zap" style="width: 18px; color: var(--primary-light);"></i> Carga Rápida (Lunes a Viernes)
+        </h3>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 1rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="time" id="quick-start" value="08:00" style="width: 110px;">
+            <span>—</span>
+            <input type="time" id="quick-end" value="15:00" style="width: 110px;">
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="apply-lv" class="btn-small" style="background: var(--surface); width: auto; font-size: 0.8rem;">Aplicar Lun-Vie</button>
+            <button id="apply-ls" class="btn-small" style="background: var(--surface); width: auto; font-size: 0.8rem;">Aplicar Lun-Sáb</button>
+          </div>
+        </div>
+      </div>
+
       <div class="card glass">
         <p style="color: var(--text-muted); margin-bottom: 2rem;">Define los horarios de entrada y salida para cada día de la semana. Los días sin horario definido se consideran no laborables.</p>
         
@@ -45,6 +62,9 @@ export async function renderUserSchedules(container, userId, userName) {
                   <span style="color: var(--text-muted); margin: 0 0.5rem;">—</span>
                   <label style="font-size: 0.75rem; color: var(--text-muted);">Salida</label>
                   <input type="time" class="end-time" data-day="${dayIndex}" value="${schedule?.end_time || ''}" style="width: 120px;">
+                </div>
+                <div style="width: 80px; text-align: right; font-weight: 600; font-size: 0.9rem;">
+                  <span class="daily-hours">0h</span>
                 </div>
                 <button class="clear-day" data-day="${dayIndex}" style="width: auto; padding: 0.4rem; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: none;">
                   <i data-lucide="trash-2" style="width: 16px;"></i>
@@ -63,6 +83,56 @@ export async function renderUserSchedules(container, userId, userName) {
 
   if (window.lucide) window.lucide.createIcons();
 
+  // Quick fill logic
+  const applyQuickFill = (daysCount) => {
+    const start = container.querySelector('#quick-start').value;
+    const end = container.querySelector('#quick-end').value;
+    if (!start || !end) return;
+
+    for (let i = 1; i <= daysCount; i++) {
+      const startInp = container.querySelector(`.start-time[data-day="${i}"]`);
+      const endInp = container.querySelector(`.end-time[data-day="${i}"]`);
+      if (startInp) startInp.value = start;
+      if (endInp) endInp.value = end;
+    }
+  };
+
+  const calculateHours = (row) => {
+    const start = row.querySelector('.start-time').value;
+    const end = row.querySelector('.end-time').value;
+    const hoursSpan = row.querySelector('.daily-hours');
+    
+    if (start && end) {
+      const [h1, m1] = start.split(':').map(Number);
+      const [h2, m2] = end.split(':').map(Number);
+      let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+      if (diff < 0) diff += 24 * 60; // Handle overnight if necessary (unlikely here but safe)
+      const h = Math.floor(diff / 60);
+      const m = diff % 60;
+      hoursSpan.textContent = h + (m > 0 ? `h ${m}m` : 'h');
+      hoursSpan.style.color = 'var(--primary-light)';
+    } else {
+      hoursSpan.textContent = '0h';
+      hoursSpan.style.color = 'var(--text-muted)';
+    }
+  };
+
+  container.querySelectorAll('.schedule-row').forEach(row => {
+    calculateHours(row);
+    row.querySelectorAll('input[type="time"]').forEach(input => {
+      input.oninput = () => {
+        calculateHours(row);
+      };
+    });
+  });
+
+  const updateAllHours = () => {
+    container.querySelectorAll('.schedule-row').forEach(calculateHours);
+  };
+
+  container.querySelector('#apply-lv').onclick = () => { applyQuickFill(5); updateAllHours(); };
+  container.querySelector('#apply-ls').onclick = () => { applyQuickFill(6); updateAllHours(); };
+
   container.querySelector('#back-to-abm').onclick = () => {
     import('./admin.js').then(m => m.renderABM(container));
   };
@@ -72,6 +142,7 @@ export async function renderUserSchedules(container, userId, userName) {
       const day = btn.dataset.day;
       container.querySelector(`.start-time[data-day="${day}"]`).value = '';
       container.querySelector(`.end-time[data-day="${day}"]`).value = '';
+      calculateHours(btn.closest('.schedule-row'));
     };
   });
 

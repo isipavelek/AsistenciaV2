@@ -20,11 +20,15 @@ export function showNotification(message, type = 'info') {
 
   container.appendChild(toast);
   
-  if (window.lucide) {
-    window.lucide.createIcons({
-      attrs: { class: 'lucide-icon' },
-      nameAttr: 'data-lucide'
-    });
+  try {
+    if (window.lucide) {
+      window.lucide.createIcons({
+        attrs: { class: 'lucide-icon' },
+        nameAttr: 'data-lucide'
+      });
+    }
+  } catch (e) {
+    console.warn('Lucide icons failed to render in notification', e);
   }
 
   // Remove toast after 3 seconds
@@ -32,4 +36,31 @@ export function showNotification(message, type = 'info') {
     toast.style.animation = 'fadeOut 0.3s ease forwards';
     setTimeout(() => toast.remove(), 300);
   }, 3000);
+}
+
+/**
+ * Requests permission for browser push notifications
+ */
+export async function requestNotificationPermission() {
+  if (!("Notification" in window)) {
+    console.warn("Este navegador no soporta notificaciones de escritorio.");
+    return false;
+  }
+  
+  if (Notification.permission === "granted") return true;
+  
+  const permission = await Notification.requestPermission();
+  return permission === "granted";
+}
+
+/**
+ * Sends a browser push notification
+ */
+export function sendBrowserNotification(title, body) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  
+  new Notification(title, {
+    body: body,
+    icon: '/vite.svg'
+  });
 }

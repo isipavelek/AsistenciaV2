@@ -28,6 +28,10 @@ CREATE TABLE attendance (
     is_compensated BOOLEAN DEFAULT FALSE,
     compensation_minutes INTEGER DEFAULT 0,
     status TEXT CHECK (status IN ('present', 'late', 'absent', 'justified')) DEFAULT 'present',
+    is_justified BOOLEAN DEFAULT FALSE,
+    justification_note TEXT,
+    document_path TEXT,
+    justified_by UUID REFERENCES profiles(id),
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
@@ -46,17 +50,42 @@ CREATE TABLE authorizations (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- 4. Settings Table (Global Config)
+-- 5. Holidays Table
+CREATE TABLE holidays (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    date DATE UNIQUE NOT NULL,
+    description TEXT,
+    type TEXT CHECK (type IN ('feriado', 'asueto', 'paro')) DEFAULT 'feriado',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- RLS for Holidays
+ALTER TABLE holidays ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can read holidays" ON holidays FOR SELECT USING (TRUE);
+CREATE POLICY "Admins can edit holidays" ON holidays FOR ALL USING (is_admin());
+
+-- 4. Settings Table
 CREATE TABLE settings (
     key TEXT PRIMARY KEY,
     value JSONB NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
+-- RLS for Settings (moved from below for clarity)
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can read settings" ON settings FOR SELECT USING (TRUE);
+CREATE POLICY "Admins can edit settings" ON settings FOR ALL USING (is_admin());
+
 -- Initial Settings
 INSERT INTO settings (key, value) VALUES 
-('school_location', '{"lat": -34.4578, "lng": -58.9100, "radius_meters": 100}'), -- Approximate for Rafael 50, Pilar
-('business_rules', '{"tolerance_minutes": 15, "daily_hours": 7, "max_late_justifications_month": 3}');
+('school_location', '{"lat": -34.4578, "lng": -58.9100, "radius_meters": 100}'),
+('business_rules', '{"tolerance_minutes": 15, "daily_hours": 7, "max_late_justifications_month": 3}'),
+('convention_limits', '{
+    "Ausente con aviso": {"month": 2, "year": 10},
+    "Atención Familiar": {"month": 3, "year": 15},
+    "Salida Excepcional": {"month": 2, "year": 12},
+    "Media Jornada": {"month": 1, "year": 6}
+}');
 
 -- RLS (Row Level Security)
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -107,6 +136,7 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER update_authorizations_updated_at BEFORE UPDATE ON authorizations FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE TRIGGER update_settings_updated_at BEFORE UPDATE ON settings FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 -- Trigger to create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -139,3 +169,41 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+-- 6. Daily Reports Tables
+CREATE TABLE daily_reports (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    date DATE UNIQUE NOT NULL,
+    created_by UUID REFERENCES profiles(id),
+    status TEXT CHECK (status IN ('draft', 'final')) DEFAULT 'draft',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+CREATE TABLE daily_report_items (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    report_id UUID REFERENCES daily_reports(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES profiles(id),
+    novelty TEXT,
+    is_authorized BOOLEAN DEFAULT FALSE,
+    observation TEXT,
+    UNIQUE(report_id, user_id)
+);
+
+-- RLS for Daily Reports
+ALTER TABLE daily_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_report_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins can view/edit daily reports" ON daily_reports FOR ALL USING (is_admin());
+CREATE POLICY "Admins can view/edit daily report items" ON daily_report_items FOR ALL USING (is_admin());
+-- 7. User Schedules Table
+CREATE TABLE user_schedules (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+    day_of_week INTEGER CHECK (day_of_week BETWEEN 1 AND 7) NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    UNIQUE(user_id, day_of_week)
+);
+
+ALTER TABLE user_schedules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admins can edit all schedules" ON user_schedules FOR ALL USING (is_admin());
+CREATE POLICY "Users can view own schedule" ON user_schedules FOR SELECT USING (auth.uid() = user_id);
