@@ -176,6 +176,81 @@ button:active {
   max-height: 90vh;
 }
 
+/* --- Dashboard Header & Greeting --- */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  gap: 1.5rem;
+}
+
+.user-greeting {
+  flex: 1;
+}
+
+.greeting-text {
+  font-size: 2.25rem;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.user-role {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.btn-header {
+  width: auto !important;
+  padding: 0.6rem 1.25rem !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--glass-border) !important;
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.bell-icon {
+  position: relative;
+  cursor: pointer;
+  padding: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.bell-icon span {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--danger);
+  color: white;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  border: 2px solid var(--bg);
+}
+
 /* Dashboard Styles */
 .dashboard-grid {
   display: grid;
@@ -386,6 +461,45 @@ button:active {
 
   h1 { font-size: 1.75rem; }
   h2 { font-size: 1.5rem; }
+
+  /* Dashboard Header Mobile Fix */
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .greeting-text {
+    font-size: 1.8rem;
+    gap: 0.5rem;
+    line-height: 1.2;
+  }
+
+  .user-role {
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .btn-header {
+    flex: 1;
+    min-width: 120px;
+    justify-content: center;
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.85rem;
+  }
+
+  .bell-icon {
+    order: -1;
+    padding: 0.5rem;
+  }
 
   .stat-value {
     font-size: 2rem;

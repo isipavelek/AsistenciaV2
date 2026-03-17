@@ -161,23 +161,23 @@ async function renderDashboard() {
   const standardHours = resolveStandardHours(profile, settings);
 
   app.innerHTML = `
-    <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-      <div>
-        <h1 style="background: var(--accent-gradient); -webkit-background-clip: text; background-clip: text; -webkit-fill-color: transparent; display: flex; align-items: center; gap: 0.5rem;">
+    <header class="dashboard-header">
+      <div class="user-greeting">
+        <h1 class="greeting-text">
           <i data-lucide="user-circle"></i> Hola, ${profile?.first_name || (isAdminEmail ? 'Israel' : 'Usuario')}
         </h1>
-        <p style="color: var(--text-muted)">${profile?.category || (isAdminEmail ? 'Director' : 'Personal No Docente')} - ${profile?.personnel_group || ''}</p>
+        <p class="user-role">${profile?.category || (isAdminEmail ? 'Director' : 'Personal No Docente')} - ${profile?.personnel_group || ''}</p>
       </div>
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
-        <div id="notif-bell" style="position: relative; cursor: pointer; padding: 0.5rem; color: var(--text-muted);">
-          <i data-lucide="bell" style="width: 20px;"></i>
-          <span id="notif-count" style="display: none; position: absolute; top: 0; right: 0; background: var(--danger); color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 0.65rem; align-items: center; justify-content: center; font-weight: bold;">0</span>
+      <div class="header-actions">
+        <div id="notif-bell" class="bell-icon">
+          <i data-lucide="bell"></i>
+          <span id="notif-count" style="display: none;">0</span>
         </div>
-        <button id="profile-btn" style="width: auto; padding: 0.5rem 1rem; background: var(--surface); border: 1px solid var(--glass-border); display: flex; align-items: center; gap: 0.5rem;">
-          <i data-lucide="user" style="width: 18px;"></i> Mi Perfil
+        <button id="profile-btn" class="btn-header">
+          <i data-lucide="user"></i> Mi Perfil
         </button>
-        <button id="logout-btn" style="width: auto; padding: 0.5rem 1rem; background: var(--surface); border: 1px solid var(--glass-border); display: flex; align-items: center; gap: 0.5rem;">
-          <i data-lucide="log-out" style="width: 18px;"></i> Salir
+        <button id="logout-btn" class="btn-header">
+          <i data-lucide="log-out"></i> Salir
         </button>
       </div>
     </header>
