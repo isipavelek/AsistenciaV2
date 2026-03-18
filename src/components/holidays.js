@@ -54,11 +54,15 @@ export async function renderHolidays(container) {
                   <td style="padding: 1rem;">${h.description || ''}</td>
                   <td style="padding: 1rem;"><span class="badge" style="background: rgba(255,255,255,0.1);">${h.type.toUpperCase()}</span></td>
                   <td style="padding: 1rem; text-align: right;">
-                    <button class="pin-holiday" data-id="${h.id}" data-pinned="${h.is_pinned}" title="${h.is_pinned ? 'Desfijar' : 'Fijar'}" style="width: auto; padding: 0.25rem 0.5rem; background: transparent; color: ${h.is_pinned ? 'var(--accent)' : 'var(--text-dim)'}; border: none; margin-right: 0.5rem;">
+                    <button class="pin-holiday btn-icon-sq" data-id="${h.id}" data-pinned="${h.is_pinned}" title="${h.is_pinned ? 'Desfijar' : 'Fijar'}" style="background: transparent; color: ${h.is_pinned ? 'var(--accent)' : 'var(--text-dim)'}; border: none;">
                       <i data-lucide="${h.is_pinned ? 'pin-off' : 'pin'}" style="width: 18px;"></i>
                     </button>
-                    <button class="edit-holiday" data-id="${h.id}" style="width: auto; padding: 0.25rem 0.5rem; background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: none; margin-right: 0.5rem;">Editar</button>
-                    <button class="delete-holiday" data-id="${h.id}" style="width: auto; padding: 0.25rem 0.5rem; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: none;">Eliminar</button>
+                    <button class="edit-holiday btn-icon-sq" data-id="${h.id}" title="Editar" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: none;">
+                      <i data-lucide="edit-2" style="width: 18px;"></i>
+                    </button>
+                    <button class="delete-holiday btn-icon-sq" data-id="${h.id}" title="Eliminar" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border: none;">
+                      <i data-lucide="trash-2" style="width: 18px;"></i>
+                    </button>
                   </td>
                 </tr>
               `).join('')}
@@ -229,8 +233,12 @@ export async function renderHolidays(container) {
   };
 
   container.onclick = async (e) => {
-    if (e.target.classList.contains('edit-holiday')) {
-      const holiday = holidays.find(h => String(h.id) === String(e.target.dataset.id));
+    const editBtn = e.target.closest('.edit-holiday');
+    const pinBtn = e.target.closest('.pin-holiday');
+    const deleteBtn = e.target.closest('.delete-holiday');
+
+    if (editBtn) {
+      const holiday = holidays.find(h => String(h.id) === String(editBtn.dataset.id));
       if (holiday) {
         container.querySelector('#holiday-modal-title').textContent = 'Editar Feriado';
         container.querySelector('#holiday-modal-subtitle').style.display = 'none';
@@ -243,10 +251,9 @@ export async function renderHolidays(container) {
       }
     }
 
-    if (e.target.closest('.pin-holiday')) {
-      const btn = e.target.closest('.pin-holiday');
-      const id = btn.dataset.id;
-      const isCurrentlyPinned = btn.dataset.pinned === 'true';
+    if (pinBtn) {
+      const id = pinBtn.dataset.id;
+      const isCurrentlyPinned = pinBtn.dataset.pinned === 'true';
       
       const { error: pinError } = await supabase
         .from('holidays')
@@ -260,12 +267,12 @@ export async function renderHolidays(container) {
       }
     }
 
-    if (e.target.classList.contains('delete-holiday')) {
+    if (deleteBtn) {
       if (confirm('¿Eliminar este feriado?')) {
         const { error: delError } = await supabase
           .from('holidays')
           .delete()
-          .eq('id', e.target.dataset.id);
+          .eq('id', deleteBtn.dataset.id);
         
         if (delError) showNotification(delError.message, 'error');
         else renderHolidays(container);
