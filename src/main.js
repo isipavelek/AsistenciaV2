@@ -900,17 +900,40 @@ async function initClockIn() {
       btn.disabled = true;
       showNotification('Estás fuera del rango permitido para marcar asistencia.', 'error');
     }
-  } catch (err) {
-    let msg = err.message;
-    if (msg.includes('Secure Origins') || msg.includes('secure origin')) {
-      msg = 'La geolocalización requiere una conexión segura (HTTPS). Usa Localhost o un túnel HTTPS para móviles.';
+    console.error('Geo error:', err);
+    let msg = 'Error desconocido al obtener ubicación.';
+    
+    // Handle Geolocation PositionError codes
+    if (err.code === 1) { // PERMISSION_DENIED
+      msg = 'Permiso de ubicación denegado. Por favor, habilítalo en la configuración de tu navegador.';
+    } else if (err.code === 2) { // POSITION_UNAVAILABLE
+      msg = 'No se pudo determinar tu ubicación. Asegúrate de tener el GPS encendido.';
+    } else if (err.code === 3) { // TIMEOUT
+      msg = 'Tiempo de espera agotado. Asegúrate de aceptar el permiso rápidamente y tener buena señal.';
+    } else if (err.message) {
+      msg = err.message;
     }
+
+    if (msg.includes('Secure Origins') || msg.includes('secure origin')) {
+      msg = 'La geolocalización requiere una conexión segura (HTTPS).';
+    }
+
     if (statusText) {
-      statusText.textContent = `❌ Error: ${msg}`;
+      statusText.innerHTML = `<span style="display:flex; align-items:center; gap:0.5rem;"><i data-lucide="help-circle" style="width:16px;"></i> ${msg}</span>`;
       statusText.style.color = 'var(--danger)';
     }
-    if (btn) btn.textContent = 'Error de Ubicación';
-    showNotification('Error al obtener ubicación: ' + msg, 'error');
+
+    if (btn) {
+      btn.textContent = 'Reintentar Ubicación';
+      btn.disabled = false;
+      btn.onclick = () => {
+        btn.disabled = true;
+        btn.textContent = 'Cargando ubicación...';
+        initClockIn();
+      };
+    }
+    showNotification(msg, 'error');
+    if (window.lucide) window.lucide.createIcons();
   }
 }
 
