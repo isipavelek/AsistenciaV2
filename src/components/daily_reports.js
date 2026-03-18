@@ -11,7 +11,7 @@ export async function renderDailyReports(container, settings) {
 
   container.innerHTML = `
     <div class="animate-in">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+      <div class="daily-reports-header">
         <h2 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="clipboard-list"></i> Parte Diario</h2>
         <div style="display: flex; gap: 0.5rem;">
           <button id="generate-pdf" style="width: auto; padding: 0.5rem 1rem; background: var(--secondary); color: white;">
@@ -20,17 +20,19 @@ export async function renderDailyReports(container, settings) {
         </div>
       </div>
 
-      <div class="card glass filters-bar" style="display: flex; align-items: flex-end; gap: 1rem; margin-bottom: 2rem;">
+      <div class="card glass filters-bar">
         <div class="form-group" style="margin-bottom:0">
           <label>Fecha del Parte</label>
           <input type="date" id="report-date" value="${selectedDate}">
         </div>
-        <button id="load-report" style="width: auto; height: 42px; background: var(--accent-gradient);">Cargar / Consolidar</button>
-        <button id="save-report" style="width: auto; height: 42px; background: var(--surface);">Guardar / Consolidar</button>
+        <div class="filter-actions" style="display: flex; gap: 1rem;">
+          <button id="load-report" style="width: auto; height: 42px; background: var(--accent-gradient);">Cargar / Consolidar</button>
+          <button id="save-report" style="width: auto; height: 42px; background: var(--surface);">Guardar / Consolidar</button>
+        </div>
       </div>
 
-      <div class="card glass" style="overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse; text-align: left;">
+      <div class="card glass table-wrapper">
+        <table class="daily-report-table">
           <thead>
             <tr style="border-bottom: 1px solid var(--glass-border);">
               <th style="padding: 1rem; width: 80px;">Legajo</th>
