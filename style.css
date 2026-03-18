@@ -754,3 +754,61 @@ button:active {
   70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
   100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
+
+/* --- Settings Specific --- */
+.settings-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)) !important;
+}
+
+.search-box {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.search-box input {
+  flex: 1;
+}
+
+.btn-icon-sq {
+  width: auto !important;
+  padding: 0.5rem 1rem !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.form-group-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.form-group-row .form-group {
+  flex: 1;
+}
+
+.rules-hours-container {
+  display: flex;
+  gap: 1rem;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+
+.rules-hours-container .form-group {
+  flex: 1;
+}
+
+/* --- Mobile Fixes for Settings --- */
+@media (max-width: 600px) {
+  .form-group-row, .rules-hours-container {
+    flex-direction: column !important;
+  }
+  
+  .form-group-row .form-group, .rules-hours-container .form-group {
+    margin-bottom: 1rem;
+  }
+  
+  .settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

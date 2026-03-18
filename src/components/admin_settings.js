@@ -15,27 +15,29 @@ export async function renderAdminSettings(container, settings) {
         <i data-lucide="settings"></i> Configuración del Sistema
       </h2>
 
-      <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));">
+      <div class="dashboard-grid settings-grid">
         <!-- Location Settings -->
         <div class="card glass">
           <h3 class="card-title"><i data-lucide="map-pin"></i> Ubicación del Establecimiento</h3>
           <form id="location-form">
             <div class="form-group">
               <label>Buscar Dirección</label>
-              <div style="display: flex; gap: 0.5rem;">
-                <input type="text" id="loc-address-search" placeholder="Ej: Av. 123, Buenos Aires" style="flex: 1;">
-                <button type="button" id="search-addr-btn" style="width: auto; padding: 0.5rem 1rem; background: var(--secondary);">
-                  <i data-lucide="search" style="width: 18px;"></i>
+              <div class="search-box">
+                <input type="text" id="loc-address-search" placeholder="Ej: Av. 123, Buenos Aires">
+                <button type="button" id="search-addr-btn" class="btn-icon-sq">
+                  <i data-lucide="search"></i>
                 </button>
               </div>
             </div>
-            <div class="form-group" style="display: flex; gap: 1rem;">
-              <label>Latitud</label>
-              <input type="number" step="any" id="loc-lat" value="${loc.lat}" required>
-            </div>
-            <div class="form-group">
-              <label>Longitud</label>
-              <input type="number" step="any" id="loc-lng" value="${loc.lng}" required>
+            <div class="form-group-row">
+              <div class="form-group">
+                <label>Latitud</label>
+                <input type="number" step="any" id="loc-lat" value="${loc.lat}" required>
+              </div>
+              <div class="form-group">
+                <label>Longitud</label>
+                <input type="number" step="any" id="loc-lng" value="${loc.lng}" required>
+              </div>
             </div>
             <div class="form-group">
               <label>Radio de Fichaje (metros)</label>
@@ -55,12 +57,12 @@ export async function renderAdminSettings(container, settings) {
               <input type="number" id="rule-tolerance" value="${rules.tolerance_minutes}" required>
             </div>
             
-            <div style="display: flex; gap: 1rem; border-top: 1px solid var(--glass-border); padding-top: 1rem; margin-top: 1rem;">
-              <div class="form-group" style="flex: 1;">
+            <div class="rules-hours-container">
+              <div class="form-group">
                 <label>Horas: Administrativo</label>
                 <input type="number" id="rule-hours-admin" value="${rules.hours_by_group?.Administrativo || 6}" required>
               </div>
-              <div class="form-group" style="flex: 1;">
+              <div class="form-group">
                 <label>Horas: Serv. Grales</label>
                 <input type="number" id="rule-hours-sg" value="${rules.hours_by_group?.['Servicios Generales'] || 7}" required>
               </div>
