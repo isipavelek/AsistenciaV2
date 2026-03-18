@@ -178,14 +178,14 @@ export async function renderABM(container) {
 
     tableBody.innerHTML = filtered.map(u => `
       <tr style="border-bottom: 1px solid var(--glass-border);">
-        <td style="padding: 1rem;">${u.last_name || '--'}</td>
-        <td style="padding: 1rem;">${u.first_name || '--'}</td>
-        <td style="padding: 1rem; font-size: 0.875rem;">${u.email}</td>
-        <td style="padding: 1rem;">${u.legajo_utn || '--'}</td>
-        <td style="padding: 1rem;"><span class="badge" style="background: rgba(255,255,255,0.1);">${u.role}</span></td>
-        <td style="padding: 1rem;">${u.category || '--'}</td>
-        <td style="padding: 1rem;">
-          <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+        <td style="padding: 1rem;" data-label="Apellido">${u.last_name || '--'}</td>
+        <td style="padding: 1rem;" data-label="Nombre">${u.first_name || '--'}</td>
+        <td style="padding: 1rem; font-size: 0.875rem;" data-label="Email">${u.email}</td>
+        <td style="padding: 1rem;" data-label="Legajo">${u.legajo_utn || '--'}</td>
+        <td style="padding: 1rem;" data-label="Rol"><span class="badge" style="background: rgba(255,255,255,0.1);">${u.role}</span></td>
+        <td style="padding: 1rem;" data-label="Categoría">${u.category || '--'}</td>
+        <td style="padding: 1rem;" data-label="Acciones">
+          <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end;">
             <button class="edit-user btn-icon-sq" data-id="${u.id}" title="Editar Perfil" style="background: var(--surface);">
               <i data-lucide="user-cog" style="width: 16px;"></i>
             </button>

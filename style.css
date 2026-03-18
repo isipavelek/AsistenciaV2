@@ -798,19 +798,21 @@ button:active {
   flex: 1;
 }
 
-/* --- Mobile Fixes for Settings --- */
-@media (max-width: 600px) {
-  .form-group-row, .rules-hours-container {
-    flex-direction: column !important;
-  }
-  
-  .form-group-row .form-group, .rules-hours-container .form-group {
-    margin-bottom: 1rem;
-  }
-  
+/* --- Settings Specific --- */
+#settings-map {
+  height: 300px;
+  width: 100%;
+  margin-top: 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  z-index: 10;
+}
+
 /* --- Analytics Specific --- */
 .analytics-grid {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
 }
 
 .chart-full-width {
@@ -902,7 +904,19 @@ button:active {
   box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
-/* --- Mobile Fixes for Analytics --- */
+/* --- Mobile Fixes --- */
+
+/* Settings */
+@media (max-width: 600px) {
+  .form-group-row, .rules-hours-container {
+    flex-direction: column !important;
+  }
+  .form-group-row .form-group, .rules-hours-container .form-group {
+    margin-bottom: 1rem;
+  }
+}
+
+/* Analytics */
 @media (max-width: 900px) {
   .chart-full-width {
     grid-column: span 1;
@@ -910,20 +924,17 @@ button:active {
 }
 
 @media (max-width: 600px) {
-  .analytics-grid {
-    grid-template-columns: 1fr !important;
-  }
-  
   .chart-container {
     min-height: 250px;
   }
 }
 
-/* --- Mobile Fixes for ABM --- */
-@media (max-width: 768px) {
+/* ABM - Card View */
+@media (max-width: 650px) {
   .abm-header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 0.75rem;
   }
   
   .header-actions {
@@ -932,25 +943,80 @@ button:active {
   
   .header-actions button {
     flex: 1;
+    justify-content: center;
   }
   
   .header-actions button span {
-    display: none; /* Hide text, show only icons on small screens */
-  }
-
-  /* Hide less critical columns on mobile */
-  .table-container th:nth-child(3), 
-  .table-container td:nth-child(3),
-  .table-container th:nth-child(6),
-  .table-container td:nth-child(6) {
     display: none;
   }
-}
 
-@media (max-width: 480px) {
+  .table-container table, 
+  .table-container thead, 
+  .table-container tbody, 
+  .table-container th, 
+  .table-container td, 
+  .table-container tr {
+    display: block !important;
+  }
+  
+  .table-container thead tr {
+    position: absolute;
+    top: -9999px;
+    left: -9999px;
+  }
+  
+  .table-container tr {
+    border: 1px solid var(--glass-border);
+    margin-bottom: 1rem;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.03);
+    padding: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  
+  .table-container td {
+    border: none !important;
+    position: relative;
+    padding-left: 45% !important;
+    text-align: right !important;
+    min-height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+  
+  .table-container td:before {
+    position: absolute;
+    left: 1rem;
+    width: 40%;
+    padding-right: 10px;
+    white-space: nowrap;
+    content: attr(data-label);
+    text-align: left;
+    font-weight: 700;
+    color: var(--secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .table-container td[data-label="Acciones"] {
+    border-top: 1px solid var(--glass-border) !important;
+    margin-top: 0.5rem;
+    padding-top: 1rem !important;
+    justify-content: center !important;
+    padding-left: 1rem !important;
+  }
+
+  .table-container td[data-label="Acciones"]:before {
+    display: none;
+  }
+
   .filters-bar {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.5rem;
+    gap: 0.75rem;
   }
 }
