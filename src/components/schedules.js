@@ -49,24 +49,24 @@ export async function renderUserSchedules(container, userId, userName) {
       <div class="card glass">
         <p style="color: var(--text-muted); margin-bottom: 2rem;">Define los horarios de entrada y salida para cada día de la semana. Los días sin horario definido se consideran no laborables.</p>
         
-        <div style="display: grid; gap: 1rem;">
+        <div style="display: grid; gap: 0.5rem;">
           ${DAYS.map((day, index) => {
             const dayIndex = index + 1; // Skip Sunday (0), Lunes is 1, etc.
             const schedule = currentSchedules.find(s => s.day_of_week === dayIndex);
             return `
-              <div class="schedule-row" style="display: flex; align-items: center; gap: 1.5rem; padding: 1rem; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid var(--glass-border);">
-                <div style="width: 100px; font-weight: 600;">${day}</div>
-                <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
-                  <label style="font-size: 0.75rem; color: var(--text-muted);">Entrada</label>
-                  <input type="time" class="start-time" data-day="${dayIndex}" value="${schedule?.start_time || ''}" style="width: 120px;">
-                  <span style="color: var(--text-muted); margin: 0 0.5rem;">—</span>
-                  <label style="font-size: 0.75rem; color: var(--text-muted);">Salida</label>
-                  <input type="time" class="end-time" data-day="${dayIndex}" value="${schedule?.end_time || ''}" style="width: 120px;">
+              <div class="schedule-row">
+                <div class="schedule-day">${day}</div>
+                <div class="schedule-controls">
+                  <label>Entrada</label>
+                  <input type="time" class="start-time" data-day="${dayIndex}" value="${schedule?.start_time || ''}">
+                  <span style="color: var(--text-muted); margin: 0 0.25rem;">—</span>
+                  <label>Salida</label>
+                  <input type="time" class="end-time" data-day="${dayIndex}" value="${schedule?.end_time || ''}">
                 </div>
-                <div style="width: 80px; text-align: right; font-weight: 600; font-size: 0.9rem;">
+                <div class="schedule-hours">
                   <span class="daily-hours">0h</span>
                 </div>
-                <button class="clear-day" data-day="${dayIndex}" style="width: auto; padding: 0.4rem; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: none;">
+                <button class="clear-day" data-day="${dayIndex}" title="Limpiar día">
                   <i data-lucide="trash-2" style="width: 16px;"></i>
                 </button>
               </div>
