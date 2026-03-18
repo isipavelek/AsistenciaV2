@@ -58,7 +58,7 @@ async function init() {
   }
 
   // Listen for auth changes
-  supabase.auth.onAuthStateChange(async (_event, newSession) => {
+  supabase.auth.onAuthStateChange(async (event, newSession) => {
     session = newSession;
     if (session) {
       await fetchProfile();
@@ -66,7 +66,9 @@ async function init() {
     } else {
       profile = null;
       renderAuth();
-      showNotification('Has cerrado sesión.', 'info'); 
+      if (event === 'SIGNED_OUT') {
+        showNotification('Has cerrado sesión.', 'info'); 
+      }
     }
   });
 }
@@ -900,6 +902,7 @@ async function initClockIn() {
       btn.disabled = true;
       showNotification('Estás fuera del rango permitido para marcar asistencia.', 'error');
     }
+  } catch (err) {
     console.error('Geo error:', err);
     let msg = 'Error desconocido al obtener ubicación.';
     
