@@ -840,6 +840,68 @@ button:active {
   text-align: center;
 }
 
+/* --- ABM Specific --- */
+.abm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.header-actions button span {
+  display: inline;
+}
+
+.filters-bar {
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.filters-bar .form-group {
+  margin-bottom: 0;
+}
+
+.search-group {
+  flex: 2;
+  min-width: 200px;
+}
+
+.filter-group {
+  flex: 1;
+  min-width: 150px;
+}
+
+.table-container {
+  overflow-x: auto;
+  border-radius: 12px;
+}
+
+.btn-icon-sq {
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px !important;
+  transition: all 0.2s ease;
+}
+
+.btn-icon-sq:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
 /* --- Mobile Fixes for Analytics --- */
 @media (max-width: 900px) {
   .chart-full-width {
@@ -854,5 +916,41 @@ button:active {
   
   .chart-container {
     min-height: 250px;
+  }
+}
+
+/* --- Mobile Fixes for ABM --- */
+@media (max-width: 768px) {
+  .abm-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .header-actions {
+    width: 100%;
+  }
+  
+  .header-actions button {
+    flex: 1;
+  }
+  
+  .header-actions button span {
+    display: none; /* Hide text, show only icons on small screens */
+  }
+
+  /* Hide less critical columns on mobile */
+  .table-container th:nth-child(3), 
+  .table-container td:nth-child(3),
+  .table-container th:nth-child(6),
+  .table-container td:nth-child(6) {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .filters-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
   }
 }

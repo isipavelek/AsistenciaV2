@@ -19,31 +19,31 @@ export async function renderABM(container) {
 
   container.innerHTML = `
     <div class="animate-in">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h2 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="users"></i> Gestión de Personal</h2>
-        <div style="display: flex; gap: 0.5rem;">
-          <button id="import-users-btn" style="width: auto; padding: 0.5rem 1rem; background: var(--surface); border: 1px solid var(--glass-border); display: flex; align-items: center; gap: 0.5rem;">
-            <i data-lucide="upload" style="width: 18px;"></i> Importar CSV
+      <div class="abm-header">
+        <h2 class="section-title"><i data-lucide="users"></i> Gestión de Personal</h2>
+        <div class="header-actions">
+          <button id="import-users-btn" class="btn-secondary" title="Importar CSV">
+            <i data-lucide="upload"></i> <span>Importar</span>
           </button>
-          <button id="export-users-btn" style="width: auto; padding: 0.5rem 1rem; background: var(--surface); border: 1px solid var(--glass-border); display: flex; align-items: center; gap: 0.5rem;">
-            <i data-lucide="download" style="width: 18px;"></i> Exportar Lista
+          <button id="export-users-btn" class="btn-secondary" title="Exportar CSV">
+            <i data-lucide="download"></i> <span>Exportar</span>
           </button>
-          <button id="add-user-btn" style="width: auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem; background: var(--accent-gradient);">
-            <i data-lucide="user-plus" style="width: 18px;"></i> Nuevo Usuario
+          <button id="add-user-btn" class="btn-primary" title="Nuevo Usuario">
+            <i data-lucide="user-plus"></i> <span>Nuevo</span>
           </button>
         </div>
       </div>
       <input type="file" id="csv-upload" accept=".csv" style="display: none;">
 
       <!-- Filters & Search Bar -->
-      <div class="glass" style="padding: 1rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
-        <div class="form-group" style="margin-bottom: 0; flex: 2; min-width: 200px;">
-          <label style="font-size: 0.75rem;">Buscar por nombre o legajo</label>
-          <input type="text" id="search-user" placeholder="Ej: Perez o 7655..." style="padding: 0.5rem;">
+      <div class="glass filters-bar">
+        <div class="form-group search-group">
+          <label>Buscar por nombre o legajo</label>
+          <input type="text" id="search-user" placeholder="Ej: Perez o 7655...">
         </div>
-        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 150px;">
-          <label style="font-size: 0.75rem;">Filtrar por Rol</label>
-          <select id="filter-role" style="padding: 0.5rem;">
+        <div class="form-group filter-group">
+          <label>Filtrar por Rol</label>
+          <select id="filter-role">
             <option value="">Todos los Roles</option>
             <option value="user">Usuario</option>
             <option value="rrhh">RRHH</option>
@@ -51,9 +51,9 @@ export async function renderABM(container) {
             <option value="director">Director</option>
           </select>
         </div>
-        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 150px;">
-          <label style="font-size: 0.75rem;">Filtrar por Grupo</label>
-          <select id="filter-group" style="padding: 0.5rem;">
+        <div class="form-group filter-group">
+          <label>Filtrar por Grupo</label>
+          <select id="filter-group">
             <option value="">Todos los Grupos</option>
             <option value="Administrativo">Administrativo</option>
             <option value="Servicios Generales">Servicios Generales</option>
@@ -61,7 +61,7 @@ export async function renderABM(container) {
         </div>
       </div>
 
-      <div class="glass" style="overflow-x: auto;">
+      <div class="glass table-container">
         <table style="width: 100%; border-collapse: collapse; text-align: left;">
           <thead>
             <tr style="border-bottom: 1px solid var(--glass-border);">
@@ -185,15 +185,25 @@ export async function renderABM(container) {
         <td style="padding: 1rem;"><span class="badge" style="background: rgba(255,255,255,0.1);">${u.role}</span></td>
         <td style="padding: 1rem;">${u.category || '--'}</td>
         <td style="padding: 1rem;">
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <button class="edit-user" data-id="${u.id}" style="width: auto; padding: 0.25rem 0.5rem; background: var(--surface);">Editar</button>
-            <button class="manage-schedules" data-id="${u.id}" data-name="${u.first_name} ${u.last_name}" style="width: auto; padding: 0.25rem 0.5rem; background: var(--surface); border: 1px solid var(--secondary);">Horarios</button>
-            <button class="reset-pass" data-email="${u.email}" style="width: auto; padding: 0.25rem 0.5rem; background: var(--surface); border: 1px solid var(--primary-light);">Reset Pass</button>
-            <button class="delete-user" data-id="${u.id}" style="width: auto; padding: 0.25rem 0.5rem; background: rgba(239, 68, 68, 0.2); color: var(--danger);">Borrar</button>
+          <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+            <button class="edit-user btn-icon-sq" data-id="${u.id}" title="Editar Perfil" style="background: var(--surface);">
+              <i data-lucide="user-cog" style="width: 16px;"></i>
+            </button>
+            <button class="manage-schedules btn-icon-sq" data-id="${u.id}" data-name="${u.first_name} ${u.last_name}" title="Gestionar Horarios" style="background: var(--surface); border-color: var(--secondary);">
+              <i data-lucide="calendar-clock" style="width: 16px;"></i>
+            </button>
+            <button class="reset-pass btn-icon-sq" data-email="${u.email}" title="Resetear Contraseña" style="background: var(--surface); border-color: var(--primary-light);">
+              <i data-lucide="key-round" style="width: 16px;"></i>
+            </button>
+            <button class="delete-user btn-icon-sq" data-id="${u.id}" title="Eliminar Usuario" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2);">
+              <i data-lucide="trash-2" style="width: 16px;"></i>
+            </button>
           </div>
         </td>
       </tr>
     `).join('');
+
+    if (window.lucide) window.lucide.createIcons();
   }
 
   // Initial render
