@@ -1092,6 +1092,59 @@ button:active {
     padding-left: 0.5rem;
     color: var(--primary-light);
   }
+
+  /* Daily Reports - Mobile Card View */
+  #daily-report-body tr {
+    display: block;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    padding: 0.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #daily-report-body td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.85rem 1rem !important;
+    text-align: right;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    min-height: 50px;
+  }
+
+  #daily-report-body td:last-child {
+    border-bottom: none;
+    background: rgba(255, 255, 255, 0.02);
+    margin-top: 0.5rem;
+  }
+
+  #daily-report-body td:before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: var(--secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    text-align: left;
+    flex: 1;
+  }
+
+  #daily-report-body .novelty-select, 
+  #daily-report-body .obs-input {
+    width: 60% !important;
+    max-width: 200px;
+  }
+
+  #daily-report-body td[data-label="Acciones"] {
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  #daily-report-body td[data-label="Acciones"]:before {
+    display: none;
+  }
 }
 
 /* Base Schedule Row (Desktop) */

@@ -39,9 +39,13 @@ export async function renderUserSchedules(container, userId, userName) {
             <span>—</span>
             <input type="time" id="quick-end" value="15:00" style="width: 110px;">
           </div>
-          <div style="display: flex; gap: 0.5rem;">
-            <button id="apply-lv" class="btn-small" style="background: var(--surface); width: auto; font-size: 0.8rem;">Aplicar Lun-Vie</button>
-            <button id="apply-ls" class="btn-small" style="background: var(--surface); width: auto; font-size: 0.8rem;">Aplicar Lun-Sáb</button>
+          <div style="display: flex; gap: 0.75rem;">
+            <button id="apply-lv" class="btn-icon-sq" title="Aplicar Lunes a Viernes" style="background: var(--surface); width: 42px; height: 42px;">
+              <i data-lucide="calendar-days" style="width: 20px;"></i>
+            </button>
+            <button id="apply-ls" class="btn-icon-sq" title="Aplicar Lunes a Sábado" style="background: var(--surface); width: 42px; height: 42px;">
+              <i data-lucide="calendar-range" style="width: 20px;"></i>
+            </button>
           </div>
         </div>
       </div>

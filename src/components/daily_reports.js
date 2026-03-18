@@ -215,13 +215,13 @@ export async function renderDailyReports(container, settings) {
       <tr style="border-bottom: 1px solid var(--glass-border); 
         ${item.is_holiday ? 'background: rgba(16, 185, 129, 0.05);' : ''} 
         ${item.is_pending ? 'background: rgba(245, 158, 11, 0.1);' : ''}">
-        <td style="padding: 1rem; ${item.is_pending ? 'border-left: 4px solid var(--warning);' : ''}">${item.legajo}</td>
-        <td style="padding: 1rem;">
+        <td data-label="Legajo" style="padding: 1rem; ${item.is_pending ? 'border-left: 4px solid var(--warning);' : ''}">${item.legajo}</td>
+        <td data-label="Personal" style="padding: 1rem;">
           ${item.name}
           ${item.is_pending ? '<br><span style="font-size: 0.7rem; color: var(--warning); font-weight: bold;">⚠️ LICENCIA PENDIENTE</span>' : ''}
         </td>
-        <td style="padding: 1rem; color: var(--text-muted); font-size: 0.85rem;">${item.schedule}</td>
-        <td style="padding: 1rem;">
+        <td data-label="Horario" style="padding: 1rem; color: var(--text-muted); font-size: 0.85rem;">${item.schedule}</td>
+        <td data-label="Novedad" style="padding: 1rem;">
           ${item.is_holiday ? 
             `<span style="color: var(--success); font-weight: bold; font-size: 0.85rem;">${item.novelty}</span>` :
             `<select class="novelty-select" data-idx="${idx}" style="font-size: 0.85rem; padding: 0.25rem; ${item.novelty === 'AUSENTE' ? 'color: var(--danger); font-weight: bold;' : ''}">
@@ -235,13 +235,13 @@ export async function renderDailyReports(container, settings) {
             </select>`
           }
         </td>
-        <td style="padding: 1rem; text-align: center;">
+        <td data-label="Autorizado" style="padding: 1rem; text-align: center;">
           <input type="checkbox" class="auth-check" data-idx="${idx}" ${item.is_authorized ? 'checked' : ''} ${item.is_holiday ? 'disabled' : ''}>
         </td>
-        <td style="padding: 1rem;">
+        <td data-label="Observación" style="padding: 1rem;">
           <input type="text" class="obs-input" data-idx="${idx}" value="${item.observation}" placeholder="..." style="font-size: 0.85rem; background: transparent; border: 1px solid var(--glass-border); width: 100%;">
         </td>
-        <td style="padding: 1rem; text-align: right;">
+        <td data-label="Acciones" style="padding: 1rem; text-align: right;">
           <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
             ${item.novelty === 'SESIÓN ABIERTA' ? `
               <button class="action-btn fix-out" data-idx="${idx}" title="Cerrar salida con horario programado" style="background: var(--warning); color: black; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.75rem;">
