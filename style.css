@@ -897,11 +897,20 @@ button:active {
   justify-content: center;
   border-radius: 8px !important;
   transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.btn-icon-sq i {
+  pointer-events: none;
 }
 
 .btn-icon-sq:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.btn-icon-sq:active {
+  transform: scale(0.9);
 }
 
 /* --- Mobile Fixes --- */
@@ -1012,6 +1021,15 @@ button:active {
 
   .table-container td[data-label="Acciones"]:before {
     display: none;
+  }
+
+  .btn-icon-sq {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .btn-icon-sq i {
+    width: 20px !important;
   }
 
   .filters-bar {

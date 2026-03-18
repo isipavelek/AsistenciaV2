@@ -245,8 +245,13 @@ export async function renderABM(container) {
   container.querySelector('#close-modal').onclick = () => modal.style.display = 'none';
 
   container.onclick = async (e) => {
-    if (e.target.classList.contains('edit-user')) {
-      const id = e.target.dataset.id;
+    const editBtn = e.target.closest('.edit-user');
+    const resetBtn = e.target.closest('.reset-pass');
+    const scheduleBtn = e.target.closest('.manage-schedules');
+    const deleteBtn = e.target.closest('.delete-user');
+
+    if (editBtn) {
+      const id = editBtn.dataset.id;
       const user = users.find(u => u.id === id);
       if (user) {
         container.querySelector('#user-id').value = user.id;
@@ -266,8 +271,8 @@ export async function renderABM(container) {
       }
     }
 
-    if (e.target.classList.contains('reset-pass')) {
-      const email = e.target.dataset.email;
+    if (resetBtn) {
+      const email = resetBtn.dataset.email;
       if (confirm(`¿Enviar correo de reseteo de contraseña a ${email}?`)) {
         const { error: resError } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: window.location.origin
@@ -277,14 +282,14 @@ export async function renderABM(container) {
       }
     }
 
-    if (e.target.classList.contains('manage-schedules')) {
-      const { id, name } = e.target.dataset;
+    if (scheduleBtn) {
+      const { id, name } = scheduleBtn.dataset;
       renderUserSchedules(container, id, name);
     }
 
-    if (e.target.classList.contains('delete-user')) {
+    if (deleteBtn) {
       if (confirm('¿Estás seguro de eliminar este usuario?')) {
-        const { error: delError } = await supabase.from('profiles').delete().eq('id', e.target.dataset.id);
+        const { error: delError } = await supabase.from('profiles').delete().eq('id', deleteBtn.dataset.id);
         if (delError) showNotification(delError.message, 'error');
         else {
           showNotification('Usuario eliminado correctamente', 'success');
