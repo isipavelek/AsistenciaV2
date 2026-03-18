@@ -8,10 +8,12 @@ export async function renderAnalytics(container) {
         <i data-lucide="bar-chart-3"></i> Analíticas de Personal
       </h2>
 
-      <div class="dashboard-grid">
-        <div class="card glass" style="grid-column: span 2;">
+      <div class="dashboard-grid analytics-grid">
+        <div class="card glass chart-full-width">
           <h3 class="card-title">Tendencia de Asistencia (Últimos 15 días)</h3>
-          <canvas id="attendance-chart" height="100"></canvas>
+          <div class="chart-container">
+            <canvas id="attendance-chart"></canvas>
+          </div>
         </div>
 
         <div class="card glass">
@@ -30,10 +32,10 @@ export async function renderAnalytics(container) {
         </div>
       </div>
 
-      <div class="card glass" style="margin-top: 1rem;">
+      <div class="card glass mood-comments-card">
         <h3 class="card-title"><i data-lucide="message-square"></i> Comentarios Recientes de Bienestar</h3>
-        <div id="mood-notes-list" style="max-height: 250px; overflow-y: auto;">
-          <p style="color: var(--text-muted); padding: 1rem; text-align: center;">Cargando comentarios...</p>
+        <div id="mood-notes-list" class="scrollable-list">
+          <p class="loading-text">Cargando comentarios...</p>
         </div>
       </div>
 

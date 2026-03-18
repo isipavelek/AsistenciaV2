@@ -808,7 +808,51 @@ button:active {
     margin-bottom: 1rem;
   }
   
-  .settings-grid {
+/* --- Analytics Specific --- */
+.analytics-grid {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.chart-full-width {
+  grid-column: span 2;
+}
+
+.chart-container {
+  position: relative;
+  width: 100%;
+  min-height: 200px;
+}
+
+.mood-comments-card {
+  margin-top: 1.5rem;
+}
+
+.scrollable-list {
+  max-height: 300px;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+}
+
+.loading-text {
+  color: var(--text-muted);
+  padding: 2rem;
+  text-align: center;
+}
+
+/* --- Mobile Fixes for Analytics --- */
+@media (max-width: 900px) {
+  .chart-full-width {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .analytics-grid {
     grid-template-columns: 1fr !important;
+  }
+  
+  .chart-container {
+    min-height: 250px;
   }
 }
