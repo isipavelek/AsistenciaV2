@@ -8,8 +8,8 @@
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 // Cambia estos datos por los de tu red WiFi
-const char* ssid = "TU_RED_WIFI";
-const char* password = "TU_PASSWORD";
+const char* ssid = "Isi_WiFi_2.4G";
+const char* password = "12345casa";
 
 // Supabase - Asegúrate de que los datos son correctos
 const char* supabaseUrl = "https://gywcfuqrwubjqiowhbsn.supabase.co/rest/v1/qr_tokens";
