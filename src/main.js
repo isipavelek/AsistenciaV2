@@ -135,9 +135,28 @@ function renderAuth() {
         </div>
         <button type="submit" id="login-btn">Iniciar Sesión</button>
       </form>
+      <div style="text-align: center; margin-top: 1rem;">
+        <a href="#" id="forgot-password-link" style="font-size: 0.875rem; color: var(--secondary); text-decoration: none;">¿Olvidaste tu contraseña?</a>
+      </div>
       <p id="auth-error" style="color: var(--danger); margin-top: 1rem; font-size: 0.875rem; display: none;"></p>
     </div>
   `;
+
+  document.querySelector('#forgot-password-link').onclick = async (e) => {
+    e.preventDefault();
+    const email = document.querySelector('#email').value;
+    if (!email) {
+      showNotification('Por favor, ingresa tu correo institucional primero.', 'error');
+      return;
+    }
+    if (confirm(`¿Enviar enlace de recuperación a ${email}?`)) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + window.location.pathname
+      });
+      if (error) showNotification(error.message, 'error');
+      else showNotification('Correo de recuperación enviado.', 'success');
+    }
+  };
 
   document.querySelector('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();

@@ -275,7 +275,7 @@ export async function renderABM(container) {
       const email = resetBtn.dataset.email;
       if (confirm(`¿Enviar correo de reseteo de contraseña a ${email}?`)) {
         const { error: resError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin
+          redirectTo: window.location.origin + window.location.pathname
         });
         if (resError) showNotification(resError.message, 'error');
         else showNotification('Correo de recuperación enviado con éxito', 'success');
