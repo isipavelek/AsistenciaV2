@@ -16,6 +16,17 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+      // Force SW unregister for PWA fix (v6)
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker && !localStorage.getItem('pwa_sw_reset_v4')) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          for (let reg of regs) reg.unregister();
+          localStorage.setItem('pwa_sw_reset_v4', 'true');
+          console.log('--- SW RESET TRIGGERED ---');
+          location.reload();
+        });
+      }
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Asistencia UTN" />
