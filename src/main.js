@@ -12,6 +12,7 @@ import { renderUserStats } from './components/user_stats.js';
 import { getSettings, resolveStandardHours } from './lib/settings.js'; 
 import { showNotification } from './lib/notifications.js'; 
 import { downloadICS } from './lib/calendar.js';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
@@ -188,8 +189,13 @@ async function renderDashboard() {
       <main class="dashboard-grid animate-in">
         <div class="card glass">
           <h3 class="card-title" style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="map-pin" style="color: var(--secondary);"></i> Fichaje</h3>
-          <p style="margin-bottom: 1.5rem; color: var(--text-muted);">Verificando ubicación...</p>
-          <button id="clock-in-btn" disabled>Cargando ubicación...</button>
+          <p style="margin-bottom: 1.5rem; color: var(--text-muted);"><span id="clock-in-status">Verificando ubicación...</span></p>
+          <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <button id="clock-in-btn" disabled>Cargando ubicación...</button>
+            <button id="clock-in-qr-btn" class="btn-secondary" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);">
+              <i data-lucide="qr-code"></i> Fichar con Código QR
+            </button>
+          </div>
         </div>
 
         <div class="card glass" id="stats-card">
@@ -262,6 +268,7 @@ async function renderDashboard() {
 
   document.querySelector('#request-auth-btn').addEventListener('click', renderRequestForm);
   document.querySelector('#view-full-history-btn').addEventListener('click', () => renderUserAuthHistory(document.querySelector('#main-content')));
+  document.querySelector('#clock-in-qr-btn').addEventListener('click', openQRScannerModal);
   
   initClockIn();
   fetchStats();
@@ -856,7 +863,7 @@ function renderAdminSection() {
 
 async function initClockIn() {
   const btn = document.querySelector('#clock-in-btn');
-  const statusText = btn.previousElementSibling;
+  const statusText = document.querySelector('#clock-in-status');
   
   try {
     const pos = await getCurrentPosition();
@@ -1178,6 +1185,82 @@ async function clockOutReminder() {
       showNotification('⚠️ Recordatorio: Sigues con el fichaje de entrada activo. ¿Olvidaste fichar la salida?', 'warning');
     }
   }
+}
+
+function openQRScannerModal() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay animate-in';
+  modal.innerHTML = `
+    <div class="card glass modal-content" style="max-width: 450px; text-align: center;">
+      <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; justify-content: center;">
+        <i data-lucide="qr-code"></i> Escanear Asistencia
+      </h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Enfoca el código QR de la pantalla del terminal inteligente.</p>
+      
+      <div id="qr-reader" style="width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 1.5rem;"></div>
+      
+      <p id="qr-status" style="color: var(--warning); font-size: 0.9rem; margin-bottom: 1.5rem; display: none;"></p>
+      
+      <button id="close-qr-modal" style="width: 100%; background: var(--surface); border: 1px solid var(--glass-border);">Cancelar / Usar Geolocalizador</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  if (window.lucide) window.lucide.createIcons();
+
+  const scanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+  let isProcessing = false;
+
+  scanner.render(async (decodedText) => {
+    if (isProcessing) return;
+    isProcessing = true;
+    scanner.pause();
+    
+    const statusText = modal.querySelector('#qr-status');
+    statusText.textContent = "Validando código en la nube...";
+    statusText.style.color = 'var(--secondary)';
+    statusText.style.display = 'block';
+
+    try {
+      const { data, error } = await supabase.rpc('registrar_fichaje_qr', { 
+        p_user_id: session.user.id, 
+        p_token: decodedText 
+      });
+
+      if (error) throw error;
+      
+      if (data && data.exito) {
+        showNotification(data.mensaje, 'success');
+        scanner.clear();
+        modal.remove();
+        initClockIn(); // actualiza estado UI (pasa de Entrada a Salida)
+        fetchStats();
+      } else {
+        showNotification(data?.mensaje || 'QR inválido o expirado.', 'error');
+        statusText.textContent = data?.mensaje || 'QR inválido. Intenta de nuevo.';
+        statusText.style.color = 'var(--danger)';
+        setTimeout(() => {
+          isProcessing = false;
+          scanner.resume();
+        }, 2000);
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('Error comunicando con el servidor', 'error');
+      statusText.textContent = 'Error validando QR. Intenta de nuevo.';
+      statusText.style.color = 'var(--danger)';
+      setTimeout(() => {
+          isProcessing = false;
+          scanner.resume();
+      }, 2000);
+    }
+  }, (errorMessage) => {
+    // ignorar scan frames sucios si no encuentra QR
+  });
+
+  modal.querySelector('#close-qr-modal').addEventListener('click', () => {
+    scanner.clear().catch(e => console.error(e));
+    modal.remove();
+  });
 }
 
 // Initialize application
