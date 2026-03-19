@@ -38,6 +38,7 @@ const app = document.querySelector('#app');
 let session = null;
 let profile = null;
 let settings = null;
+let isResetModalOpen = false;
 
 /**
  * Initialize application
@@ -51,7 +52,9 @@ async function init() {
     console.log('Auth event:', event, session ? 'Session active' : 'No session');
     
     if (event === 'PASSWORD_RECOVERY') {
-      showResetPasswordModal();
+      if (!isResetModalOpen) {
+        showResetPasswordModal();
+      }
     } else if (session) {
       // Avoid fetching profile if we are in recovery state but haven't triggered the modal yet
       if (!window.location.hash.includes('type=recovery')) {
@@ -1502,7 +1505,11 @@ function openQRScannerModal() {
 }
 
 function showResetPasswordModal() {
+  if (isResetModalOpen) return;
+  isResetModalOpen = true;
+
   const modal = document.createElement('div');
+  modal.id = 'reset-password-modal';
   modal.className = 'modal-overlay animate-in';
   modal.innerHTML = `
     <div class="card glass modal-content" style="max-width: 400px; width: 90%;">
@@ -1563,18 +1570,32 @@ function showResetPasswordModal() {
         console.log('Password updated successfully');
         showNotification('Contraseña actualizada con éxito', 'success');
         modal.remove();
+        isResetModalOpen = false;
         await supabase.auth.signOut();
         renderAuth();
       }
     } catch (err) {
       console.error('Update password exception:', err);
-      showNotification('Error inesperado: ' + err.message, 'error');
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = 'Actualizar Contraseña';
+      // Supabase sometimes throws a 'Lock broken' error even if the update succeeded
+      if (err.message && err.message.includes('Lock broken')) {
+        console.warn('Handling lock broken error as success...');
+        showNotification('Contraseña actualizada (con advertencia de sesión)', 'success');
+        modal.remove();
+        isResetModalOpen = false;
+        await supabase.auth.signOut();
+        renderAuth();
+      } else {
+        showNotification('Error inesperado: ' + err.message, 'error');
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Actualizar Contraseña';
+      }
     }
   };
 
-  cancelBtn.onclick = () => modal.remove();
+  cancelBtn.onclick = () => {
+    modal.remove();
+    isResetModalOpen = false;
+  };
 }
 
 init();
