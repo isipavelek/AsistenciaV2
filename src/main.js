@@ -23,6 +23,15 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // Mostrar el botón de instalación si existe en el DOM
+  const installBtn = document.querySelector('#install-pwa-btn');
+  if (installBtn) installBtn.style.display = 'flex';
+});
+
 const app = document.querySelector('#app');
 
 // State management
@@ -176,6 +185,9 @@ async function renderDashboard() {
           <i data-lucide="bell"></i>
           <span id="notif-count" style="display: none;">0</span>
         </div>
+        <button id="install-pwa-btn" class="btn-header" style="display: none; background: var(--secondary); color: white;">
+          <i data-lucide="download"></i> Instalar App
+        </button>
         <button id="profile-btn" class="btn-header">
           <i data-lucide="user"></i> Mi Perfil
         </button>
@@ -243,6 +255,18 @@ async function renderDashboard() {
   document.querySelector('#logout-btn').addEventListener('click', () => supabase.auth.signOut());
   document.querySelector('#profile-btn').addEventListener('click', () => renderProfile(document.querySelector('#main-content'), profile));
   document.querySelector('#view-stats-btn').addEventListener('click', () => renderUserStats(document.querySelector('#main-content'), session.user.id));
+  
+  const installBtn = document.querySelector('#install-pwa-btn');
+  if (installBtn && deferredPrompt) installBtn.style.display = 'flex';
+  
+  installBtn?.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to install prompt: ${outcome}`);
+    deferredPrompt = null;
+    installBtn.style.display = 'none';
+  });
   
   if (['director', 'vicedirector', 'rrhh'].includes(profile?.role)) {
     document.querySelector('#nav-abm')?.addEventListener('click', () => renderABM(document.querySelector('#main-content')));
