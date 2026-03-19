@@ -257,15 +257,30 @@ async function renderDashboard() {
   document.querySelector('#view-stats-btn').addEventListener('click', () => renderUserStats(document.querySelector('#main-content'), session.user.id));
   
   const installBtn = document.querySelector('#install-pwa-btn');
-  if (installBtn && deferredPrompt) installBtn.style.display = 'flex';
+  console.log('Install Button state:', { buttonExists: !!installBtn, hasPrompt: !!deferredPrompt });
+  
+  if (installBtn && deferredPrompt) {
+    installBtn.style.display = 'flex';
+    console.log('PWA Install button displayed');
+  }
   
   installBtn?.addEventListener('click', async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to install prompt: ${outcome}`);
-    deferredPrompt = null;
-    installBtn.style.display = 'none';
+    console.log('Install button clicked');
+    if (!deferredPrompt) {
+      console.warn('No deferredPrompt available on click');
+      alert('La opción de instalación no está disponible actualmente. Puedes instalarla desde el menú del navegador (tres puntos -> Instalar).');
+      return;
+    }
+    
+    try {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`User response to install prompt: ${outcome}`);
+      deferredPrompt = null;
+      installBtn.style.display = 'none';
+    } catch (err) {
+      console.error('Error during PWA prompt:', err);
+    }
   });
   
   if (['director', 'vicedirector', 'rrhh'].includes(profile?.role)) {
