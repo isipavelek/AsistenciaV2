@@ -1246,13 +1246,15 @@ function openQRScannerModal() {
             initClockIn();
             fetchStats();
           } else {
+            console.warn("RPC falló:", data);
             showNotification(data?.mensaje || 'QR inválido.', 'error');
             statusText.textContent = data?.mensaje || 'QR inválido. Reintenta.';
             statusText.style.color = 'var(--danger)';
-            setTimeout(() => { isProcessing = true; isProcessing = false; }, 2000); // Pequeña demora para reintento
+            setTimeout(() => { isProcessing = false; }, 2000); 
           }
         } catch (err) {
-          console.error(err);
+          console.error("Error en RPC:", err);
+          isProcessing = false;
           showNotification('Error de validación', 'error');
           statusText.textContent = 'Error de conexión. Reintenta.';
           statusText.style.color = 'var(--danger)';
