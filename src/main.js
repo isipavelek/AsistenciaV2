@@ -12,7 +12,7 @@ import { renderUserStats } from './components/user_stats.js';
 import { getSettings, resolveStandardHours } from './lib/settings.js'; 
 import { showNotification } from './lib/notifications.js'; 
 import { downloadICS } from './lib/calendar.js';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
@@ -1197,8 +1197,14 @@ function openQRScannerModal() {
       </h3>
       <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Enfoca el código QR de la pantalla del terminal inteligente.</p>
       
-      <div id="qr-reader" style="width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 1.5rem;"></div>
+      <div id="qr-reader" style="width: 100%; border-radius: 12px; overflow: hidden; margin-bottom: 1.5rem; background: #000; min-height: 250px;"></div>
       
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+        <button id="switch-camera-btn" class="btn-secondary" style="flex: 1; display: none; font-size: 0.8rem; padding: 0.6rem; border: 1px solid var(--glass-border);">
+          <i data-lucide="refresh-cw" style="width: 14px; vertical-align: middle;"></i> Cambiar cámara
+        </button>
+      </div>
+
       <p id="qr-status" style="color: var(--warning); font-size: 0.9rem; margin-bottom: 1.5rem; display: none;"></p>
       
       <button id="close-qr-modal" style="width: 100%; background: var(--surface); border: 1px solid var(--glass-border);">Cancelar / Usar Geolocalizador</button>
@@ -1207,65 +1213,82 @@ function openQRScannerModal() {
   document.body.appendChild(modal);
   if (window.lucide) window.lucide.createIcons();
 
-  // Configuración del escáner - forzamos cámara trasera (environment)
-  const scanner = new Html5QrcodeScanner("qr-reader", { 
-    fps: 10, 
-    qrbox: { width: 250, height: 250 },
-    videoConstraints: {
-      facingMode: "environment"
-    }
-  }, false);
+  const html5QrCode = new Html5Qrcode("qr-reader");
+  let currentFacingMode = "environment";
   let isProcessing = false;
 
-  scanner.render(async (decodedText) => {
-    if (isProcessing) return;
-    isProcessing = true;
-    scanner.pause();
-    
-    const statusText = modal.querySelector('#qr-status');
-    statusText.textContent = "Validando código en la nube...";
-    statusText.style.color = 'var(--secondary)';
-    statusText.style.display = 'block';
-
+  const startScanner = async (facingMode) => {
     try {
-      const { data, error } = await supabase.rpc('registrar_fichaje_qr', { 
-        p_user_id: session.user.id, 
-        p_token: decodedText 
+      const config = { fps: 15, qrbox: { width: 250, height: 250 } };
+      await html5QrCode.start({ facingMode: facingMode }, config, async (decodedText) => {
+        if (isProcessing) return;
+        isProcessing = true;
+        
+        // Limpiamos el texto por si tiene espacios o caracteres invisibles
+        const cleanToken = decodedText.trim();
+        
+        const statusText = modal.querySelector('#qr-status');
+        statusText.textContent = "Validando código...";
+        statusText.style.color = 'var(--secondary)';
+        statusText.style.display = 'block';
+
+        try {
+          const { data, error } = await supabase.rpc('registrar_fichaje_qr', { 
+            p_user_id: session.user.id, 
+            p_token: cleanToken 
+          });
+
+          if (error) throw error;
+          
+          if (data && data.exito) {
+            showNotification(data.mensaje, 'success');
+            if (html5QrCode.isScanning) await html5QrCode.stop();
+            modal.remove();
+            initClockIn();
+            fetchStats();
+          } else {
+            showNotification(data?.mensaje || 'QR inválido o expirado.', 'error');
+            statusText.textContent = data?.mensaje || 'QR inválido. Reintenta.';
+            statusText.style.color = 'var(--danger)';
+            setTimeout(() => { isProcessing = false; }, 2000);
+          }
+        } catch (err) {
+          console.error(err);
+          showNotification('Error validando QR', 'error');
+          statusText.textContent = 'Error de servidor. Reintenta.';
+          statusText.style.color = 'var(--danger)';
+          setTimeout(() => { isProcessing = false; }, 2000);
+        }
       });
-
-      if (error) throw error;
-      
-      if (data && data.exito) {
-        showNotification(data.mensaje, 'success');
-        scanner.clear();
-        modal.remove();
-        initClockIn(); // actualiza estado UI (pasa de Entrada a Salida)
-        fetchStats();
-      } else {
-        showNotification(data?.mensaje || 'QR inválido o expirado.', 'error');
-        statusText.textContent = data?.mensaje || 'QR inválido. Intenta de nuevo.';
-        statusText.style.color = 'var(--danger)';
-        setTimeout(() => {
-          isProcessing = false;
-          scanner.resume();
-        }, 2000);
-      }
     } catch (err) {
-      console.error(err);
-      showNotification('Error comunicando con el servidor', 'error');
-      statusText.textContent = 'Error validando QR. Intenta de nuevo.';
-      statusText.style.color = 'var(--danger)';
-      setTimeout(() => {
-          isProcessing = false;
-          scanner.resume();
-      }, 2000);
+      console.warn("No se pudo iniciar el escaneo:", err);
+      const statusText = modal.querySelector('#qr-status');
+      statusText.textContent = "Error al iniciar cámara: " + (err.message || "Permiso denegado");
+      statusText.style.display = "block";
     }
-  }, (errorMessage) => {
-    // ignorar scan frames sucios si no encuentra QR
-  });
+  };
 
-  modal.querySelector('#close-qr-modal').addEventListener('click', () => {
-    scanner.clear().catch(e => console.error(e));
+  // Detectar múltiples cámaras para mostrar el botón de cambio
+  Html5Qrcode.getCameras().then(cameras => {
+    if (cameras && cameras.length > 1) {
+      const switchBtn = modal.querySelector('#switch-camera-btn');
+      switchBtn.style.display = 'block';
+      switchBtn.onclick = async () => {
+        currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
+        if (html5QrCode.isScanning) {
+          await html5QrCode.stop();
+          startScanner(currentFacingMode);
+        }
+      };
+    }
+  }).catch(e => console.warn("Error al listar cámaras:", e));
+
+  startScanner(currentFacingMode);
+
+  modal.querySelector('#close-qr-modal').addEventListener('click', async () => {
+    try {
+      if (html5QrCode.isScanning) await html5QrCode.stop();
+    } catch(e) {}
     modal.remove();
   });
 }

@@ -84,7 +84,7 @@ void loop() {
       String payload = "{\"token\":\"" + tokenActivo + "\"}";
       int httpResponseCode = http.POST(payload);
       
-      if (httpResponseCode > 0) {
+      if (httpResponseCode == 201) {
         Serial.print("HTTP POST OK, Code: ");
         Serial.println(httpResponseCode);
         mostrarQR(tokenActivo);
@@ -92,9 +92,15 @@ void loop() {
         Serial.print("Error en HTTP POST: ");
         Serial.println(http.errorToString(httpResponseCode).c_str());
         
-        // Si hay error, mostrar en pantalla
+        // Si hay error, mostrar en pantalla para diagnóstico
         u8g2.clearBuffer();
-        u8g2.drawStr(20, 34, "Error API");
+        u8g2.setCursor(5, 20);
+        u8g2.print("Error Supabase");
+        u8g2.setCursor(5, 40);
+        u8g2.print("Status: ");
+        u8g2.print(httpResponseCode);
+        u8g2.setCursor(5, 55);
+        u8g2.print("Reintentando...");
         u8g2.sendBuffer();
       }
       http.end();
