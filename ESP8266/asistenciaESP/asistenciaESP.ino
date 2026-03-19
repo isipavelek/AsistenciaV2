@@ -74,10 +74,12 @@ void loop() {
       WiFiClientSecure client;
       client.setInsecure(); // No verificamos el certificado SSL por simplicidad (ESP8266)
       
+      // Subir a Supabase - Usamos query parameter para la apikey por robustez
+      String fullUrl = String(supabaseUrl) + "?apikey=" + String(supabaseKey);
+      
       HTTPClient http;
-      http.begin(client, supabaseUrl);
+      http.begin(client, fullUrl);
       http.addHeader("Content-Type", "application/json");
-      http.addHeader("apikey", supabaseKey);
       http.addHeader("Authorization", String("Bearer ") + supabaseKey);
       http.addHeader("Prefer", "return=representation");
       
@@ -89,8 +91,10 @@ void loop() {
         Serial.println(httpResponseCode);
         mostrarQR(tokenActivo);
       } else {
+        String responseBody = http.getString();
         Serial.print("Error en HTTP POST: ");
-        Serial.println(http.errorToString(httpResponseCode).c_str());
+        Serial.println(httpResponseCode);
+        Serial.println("Cuerpo de respuesta: " + responseBody);
         
         // Si hay error, mostrar en pantalla para diagnóstico
         u8g2.clearBuffer();
