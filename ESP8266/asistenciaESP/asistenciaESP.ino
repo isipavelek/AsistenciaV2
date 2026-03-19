@@ -1,4 +1,5 @@
 #include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <U8g2lib.h>
@@ -17,9 +18,12 @@
 // Constructor U8g2 para HX1230
 U8G2_HX1230_96X68_F_3W_SW_SPI u8g2(U8G2_R0, HX1230_CLK, HX1230_DIN, HX1230_CS, HX1230_RST);
 
-// WiFi
-const char* ssid = "EST UTN";
-const char* password = "ObiWan2025";
+// Instancia Multi-WiFi
+ESP8266WiFiMulti wifiMulti;
+
+// Listado de redes configuradas para el diagnóstico
+const char* targetSSIDs[] = {"EST UTN", "EST-UTN2", "EST-UTN3", "EST-UTN4"};
+const int numTargetNetworks = 4;
 
 // Supabase
 const char* supabaseUrl = "https://gywcfuqrwubjqiowhbsn.supabase.co/rest/v1/qr_tokens";
@@ -30,7 +34,6 @@ const long updateInterval = 10000; // 10 segundos
 
 void diagnosticoWiFi() {
   Serial.println("\n--- ESCANEANDO REDES WIFI (2.4GHz) ---");
-  // WiFi.scanNetworks() devolverá el número de redes encontradas
   int n = WiFi.scanNetworks();
   if (n == 0) {
     Serial.println("No se encontraron redes WiFi. Verifica que haya redes de 2.4GHz cerca.");
@@ -43,7 +46,15 @@ void diagnosticoWiFi() {
       Serial.print(": ");
       Serial.print(currentSSID);
       
-      if (currentSSID == ssid) {
+      bool isMatch = false;
+      for (int j = 0; j < numTargetNetworks; j++) {
+        if (currentSSID == targetSSIDs[j]) {
+          isMatch = true;
+          break;
+        }
+      }
+      
+      if (isMatch) {
         Serial.print(" [MATCH!] ");
       }
       
@@ -73,16 +84,23 @@ void setup() {
   u8g2.setFont(u8g2_font_6x10_tf);
   
   u8g2.clearBuffer();
-  u8g2.drawStr(10, 34, "Conectando...");
+  u8g2.drawStr(10, 34, "Buscando WiFi...");
   u8g2.sendBuffer();
 
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+  // Configurar lista de redes prioritarias
+  wifiMulti.addAP("EST UTN", "ObiWan2025");
+  wifiMulti.addAP("EST-UTN2", "Isi12345");
+  wifiMulti.addAP("EST-UTN3", "Isi12345");
+  wifiMulti.addAP("EST-UTN4", "Isi12345");
+
+  Serial.println("Esperando conexión WiFi...");
+  while (wifiMulti.run() != WL_CONNECTED) {
+    delay(1000);
     Serial.print(".");
   }
   
-  Serial.println("\nWiFi conectado!");
+  Serial.println("\nWiFi conectado a: " + WiFi.SSID());
+  Serial.println("IP: " + WiFi.localIP().toString());
   
   u8g2.clearBuffer();
   u8g2.drawStr(25, 34, "WiFi OK!");
@@ -91,13 +109,14 @@ void setup() {
 }
 
 void loop() {
-  if (millis() - lastUpdate >= updateInterval || lastUpdate == 0) {
-    lastUpdate = millis();
-    Serial.println("\n--- Intentando obtener nuevo token ---");
-    
-    String tokenActivo = "qr_" + String(random(10000, 99999)) + "_" + String(millis());
-    
-    if(WiFi.status() == WL_CONNECTED) {
+  // Asegurar conectividad en cada ciclo
+  if (wifiMulti.run() == WL_CONNECTED) {
+    if (millis() - lastUpdate >= updateInterval || lastUpdate == 0) {
+      lastUpdate = millis();
+      Serial.println("\n--- Intentando obtener nuevo token ---");
+      
+      String tokenActivo = "qr_" + String(random(10000, 99999)) + "_" + String(millis());
+      
       WiFiClientSecure client;
       client.setInsecure(); 
       
@@ -133,9 +152,13 @@ void loop() {
         u8g2.sendBuffer();
       }
       http.end();
-    } else {
-      Serial.println("WiFi desconectado!");
     }
+  } else {
+    Serial.println("WiFi perdido. Reconectando...");
+    u8g2.clearBuffer();
+    u8g2.drawStr(10, 34, "Reconectando...");
+    u8g2.sendBuffer();
+    delay(5000);
   }
 }
 
