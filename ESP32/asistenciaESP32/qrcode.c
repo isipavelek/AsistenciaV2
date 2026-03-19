@@ -30,8 +30,8 @@ static const int8_t NUM_ERROR_CORRECTION_BLOCKS[4] = { 1, 1, 2, 2 };
 static const uint16_t NUM_RAW_DATA_MODULES = 567;
 # endif
 
-static int max(int a, int b) { return (a > b) ? a : b; }
-static int abs(int value) { return (value < 0) ? -value : value; }
+static int qr_max(int a, int b) { return (a > b) ? a : b; }
+static int qr_abs(int value) { return (value < 0) ? -value : value; }
 
 static int8_t getAlphanumeric(char c) {
     if (c >= '0' && c <= '9') { return (c - '0'); }
@@ -147,7 +147,7 @@ static void drawFinderPattern(BitBucket *modules, BitBucket *isFunction, uint8_t
     uint8_t size = modules->bitOffsetOrWidth;
     for (int8_t i = -4; i <= 4; i++) {
         for (int8_t j = -4; j <= 4; j++) {
-            uint8_t dist = max(abs(i), abs(j));
+            uint8_t dist = qr_max(qr_abs(i), qr_abs(j));
             int16_t xx = x + j, yy = y + i;
             if (0 <= xx && xx < size && 0 <= yy && yy < size) {
                 setFunctionModule(modules, isFunction, xx, yy, dist != 2 && dist != 4);
@@ -159,7 +159,7 @@ static void drawFinderPattern(BitBucket *modules, BitBucket *isFunction, uint8_t
 static void drawAlignmentPattern(BitBucket *modules, BitBucket *isFunction, uint8_t x, uint8_t y) {
     for (int8_t i = -2; i <= 2; i++) {
         for (int8_t j = -2; j <= 2; j++) {
-            setFunctionModule(modules, isFunction, x + j, y + i, max(abs(i), abs(j)) != 1);
+            setFunctionModule(modules, isFunction, x + j, y + i, qr_max(qr_abs(i), qr_abs(j)) != 1);
         }
     }
 }

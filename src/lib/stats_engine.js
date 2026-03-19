@@ -186,8 +186,21 @@ export async function getConventionLimits() {
   };
 }
 
+/**
+ * Calculates duration in decimal hours between two timestamps
+ */
+export function getDurationHours(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return 0;
+  const start = new Date(checkIn);
+  const end = new Date(checkOut);
+  const diffMs = end - start;
+  if (diffMs < 0) return 0;
+  return parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+}
+
 // Keep the object export for backward compatibility if needed, but named is preferred
 export const StatsEngine = {
   getUserStats,
-  getConventionLimits
+  getConventionLimits,
+  getDurationHours
 };

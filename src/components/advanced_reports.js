@@ -1,9 +1,9 @@
 import { supabase } from '../lib/supabase.js';
 import { showNotification } from '../lib/notifications.js';
-import { getUserStats, getConventionLimits } from '../lib/stats_engine.js';
+import { getUserStats, getConventionLimits, getDurationHours } from '../lib/stats_engine.js';
 
 /**
- * Renders the Advanced Reports Dashboard
+ * Renders the Advanced Reports Dashboard (Resumen por Usuario)
  */
 export async function renderAdvancedReports(container) {
   // Fetch current user and their role
@@ -20,52 +20,48 @@ export async function renderAdvancedReports(container) {
   // Fetch users for the filter
   const { data: users } = await supabase
     .from('profiles')
-    .select('id, first_name, last_name')
+    .select('id, first_name, last_name, legajo_utn')
     .order('last_name');
 
   const now = new Date();
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(now.getDate() - 30);
+
   let selectedUserId = 'all';
-  let selectedYear = now.getFullYear();
-  let selectedMonth = now.getMonth();
+  let dateFrom = thirtyDaysAgo.toISOString().split('T')[0];
+  let dateTo = now.toISOString().split('T')[0];
 
   container.innerHTML = `
     <div class="animate-in">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-        <h2 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="bar-chart-big"></i> Reportes y Convenio</h2>
+        <h2 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="users"></i> Resumen por Usuario</h2>
         <div style="display: flex; gap: 0.5rem;">
+          <button id="add-manual-fichaje-btn" class="btn-primary" style="width: auto; padding: 0.5rem 1rem;">
+            <i data-lucide="plus-circle"></i> Nuevo Fichaje
+          </button>
           <button id="export-advanced-csv" style="width: auto; padding: 0.5rem 1rem; background: var(--surface);">
             <i data-lucide="download" style="width: 16px;"></i> CSV
-          </button>
-          <button id="export-advanced-pdf" style="width: auto; padding: 0.5rem 1rem; background: var(--secondary); color: white;">
-            <i data-lucide="file-text" style="width: 16px;"></i> PDF
           </button>
         </div>
       </div>
 
-      <div class="filters-bar card glass" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; align-items: flex-end;">
+      <div class="filters-bar card glass" style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 1rem; align-items: flex-end;">
         <div class="form-group" style="margin-bottom:0">
-          <label>Usuario</label>
+          <label>Seleccionar Personal</label>
           <select id="filter-user">
             <option value="all">Todos los usuarios</option>
-            ${users?.map(u => `<option value="${u.id}">${u.last_name}, ${u.first_name}</option>`).join('')}
+            ${users?.map(u => `<option value="${u.id}">${u.last_name}, ${u.first_name} (${u.legajo_utn || 'S/L'})</option>`).join('')}
           </select>
         </div>
         <div class="form-group" style="margin-bottom:0">
-          <label>Año</label>
-          <select id="filter-year">
-            ${[selectedYear, selectedYear-1].map(y => `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`).join('')}
-          </select>
+          <label>Desde</label>
+          <input type="date" id="filter-date-from" value="${dateFrom}">
         </div>
         <div class="form-group" style="margin-bottom:0">
-          <label>Mes</label>
-          <select id="filter-month">
-            <option value="all">Todo el año</option>
-            ${['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((m, i) => `
-              <option value="${i}" ${i === selectedMonth ? 'selected' : ''}>${m}</option>
-            `).join('')}
-          </select>
+          <label>Hasta</label>
+          <input type="date" id="filter-date-to" value="${dateTo}">
         </div>
-        <button id="apply-filters" style="width: auto; height: 42px; background: var(--accent-gradient);">Ver Estadísticas</button>
+        <button id="apply-filters" style="width: auto; height: 42px; background: var(--accent-gradient);">Actualizar</button>
       </div>
 
       <div id="convention-dashboard" style="display: none; margin-bottom: 2rem;">
@@ -77,17 +73,20 @@ export async function renderAdvancedReports(container) {
       </div>
 
       <div class="card glass" style="margin-top: 2rem; overflow-x: auto;">
-        <h3 class="card-title" style="padding: 1rem 1rem 0 1rem;"><i data-lucide="list"></i> Historial de Registros</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem;">
+          <h3 class="card-title" style="margin: 0;"><i data-lucide="list"></i> Registros en Crudo</h3>
+          <span id="record-count-badge" class="badge" style="background: var(--surface);">0 registros</span>
+        </div>
         <table style="width: 100%; border-collapse: collapse; text-align: left;">
           <thead>
             <tr style="border-bottom: 1px solid var(--glass-border);">
               <th style="padding: 1rem;">Fecha</th>
               <th style="padding: 1rem;">Personal</th>
               <th style="padding: 1rem;">Entrada</th>
+              <th style="padding: 1rem;">Salida</th>
+              <th style="padding: 1rem;">Horas</th>
               <th style="padding: 1rem;">Estado</th>
-              <th style="padding: 1rem;">Doc</th>
-              <th style="padding: 1rem;">Justificación / Auditoría</th>
-              <th style="padding: 1rem;">Acción</th>
+              <th style="padding: 1rem; text-align: center;">Acciones</th>
             </tr>
           </thead>
           <tbody id="reports-table-body">
@@ -96,31 +95,21 @@ export async function renderAdvancedReports(container) {
         </table>
       </div>
 
-      <!-- Chart Section -->
-      <div id="chart-section" class="card glass" style="margin-top: 2rem; min-height: 400px; display: flex; flex-direction: column;">
-        <h3 class="card-title">Análisis de Asistencia</h3>
-        <div style="flex: 1; position: relative;">
-          <canvas id="main-chart-canvas"></canvas>
-        </div>
-      </div>
-
+      <!-- Modals will be added here -->
+      <div id="edit-record-modal" class="modal-overlay" style="display: none;"></div>
       <div id="justify-modal" class="modal-overlay" style="display: none;">
         <div class="card glass modal-content" style="max-width: 400px; width: 90%;">
-          <h3>Justificar Registros</h3>
+          <h3>Justificar / Editar Registro</h3>
           <p id="justify-user-name" style="color: var(--text-base); font-size: 1rem; margin-bottom: 0.5rem;"></p>
           <p id="justify-record-type" style="color: var(--text-muted); font-size: 0.875rem;"></p>
           <form id="justify-form" style="margin-top: 1.5rem;">
             <input type="hidden" id="justify-record-id">
             <div class="form-group">
-              <label>Nota de Justificación</label>
-              <textarea id="justify-note" placeholder="Ej: Certificado médico presentado" style="width: 100%; background: var(--surface); color: white; border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.5rem;"></textarea>
-            </div>
-            <div class="form-group">
-              <label>Adjuntar Comprobante (Opcional)</label>
-              <input type="file" id="justify-file" accept="image/*,.pdf" style="background: var(--surface);">
+              <label>Nota / Motivo</label>
+              <textarea id="justify-note" placeholder="Ej: Olvido de fichaje, compensado..." style="width: 100%; min-height: 80px; background: var(--surface); color: white; border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.5rem;"></textarea>
             </div>
             <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-              <button type="submit" id="save-justify" style="background: var(--accent-gradient);">Confirmar Justificación</button>
+              <button type="submit" id="save-justify" style="background: var(--accent-gradient);">Guardar Cambios</button>
               <button type="button" id="close-justify-modal" style="background: var(--surface);">Cancelar</button>
             </div>
           </form>
@@ -133,25 +122,18 @@ export async function renderAdvancedReports(container) {
 
   async function loadData() {
     selectedUserId = container.querySelector('#filter-user').value;
-    selectedYear = parseInt(container.querySelector('#filter-year').value);
-    const monthVal = container.querySelector('#filter-month').value;
-    selectedMonth = monthVal === 'all' ? null : parseInt(monthVal);
+    dateFrom = container.querySelector('#filter-date-from').value;
+    dateTo = container.querySelector('#filter-date-to').value;
 
-    let startDate, endDate;
-    if (selectedMonth !== null) {
-      startDate = new Date(selectedYear, selectedMonth, 1).toISOString().split('T')[0];
-      endDate = new Date(selectedYear, selectedMonth + 1, 0).toISOString().split('T')[0];
-    } else {
-      startDate = `${selectedYear}-01-01`;
-      endDate = `${selectedYear}-12-31`;
-    }
+    const loaderStr = '<tr><td colspan="7" style="padding: 2rem; text-align: center;">Cargando datos...</td></tr>';
+    container.querySelector('#reports-table-body').innerHTML = loaderStr;
 
     // Fetch Attendance with Auditor profile
     let query = supabase
       .from('attendance')
-      .select('*, profiles:user_id(first_name, last_name), auditor:justified_by(first_name, last_name)')
-      .gte('created_at', `${startDate}T00:00:00.000Z`)
-      .lte('created_at', `${endDate}T23:59:59.999Z`)
+      .select('*, profiles:user_id(first_name, last_name, legajo_utn), auditor:justified_by(first_name, last_name)')
+      .gte('created_at', `${dateFrom}T00:00:00.000Z`)
+      .lte('created_at', `${dateTo}T23:59:59.999Z`)
       .order('created_at', { ascending: false });
 
     if (selectedUserId !== 'all') {
@@ -161,370 +143,321 @@ export async function renderAdvancedReports(container) {
     const { data: records, error } = await query;
     if (error) { showNotification(error.message, 'error'); return; }
 
+    container.querySelector('#record-count-badge').textContent = `${records.length} registros`;
+
     // Fetch Holidays for the range
     const { data: hRange } = await supabase
       .from('holidays')
       .select('*')
-      .gte('date', startDate)
-      .lte('date', endDate);
+      .gte('date', dateFrom)
+      .lte('date', dateTo);
     
     const holidayMap = new Map(hRange?.map(h => [h.date, h]) || []);
 
     // If a specific user is selected, show convention dashboard
     if (selectedUserId !== 'all') {
-      const stats = await getUserStats(selectedUserId, selectedYear, selectedMonth);
-      const limits = await getConventionLimits();
-      renderConventionDashboard(stats, limits);
+      // Note: getUserStats still uses year/month, we might need a version for range
+      // but for now we'll show the standard stats
+      const stats = await getUserStats(selectedUserId, new Date(dateFrom).getFullYear(), new Date(dateFrom).getMonth());
+      renderConventionDashboard(stats);
       container.querySelector('#convention-dashboard').style.display = 'block';
     } else {
       container.querySelector('#convention-dashboard').style.display = 'none';
     }
 
-    renderStats(records);
-    renderTable(records);
-    renderChart(records);
+    renderStats(records, holidayMap);
+    renderTable(records, holidayMap);
   }
 
-  async function renderConventionDashboard(stats, limits) {
+  function renderConventionDashboard(stats) {
     const dashboard = container.querySelector('#convention-dashboard');
-    
     dashboard.innerHTML = `
-      <div class="card glass" style="padding: 1.5rem;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
-          <div>
-            <h3 class="card-title"><i data-lucide="award"></i> Cumplimiento de Convenio</h3>
-            <p style="color: var(--text-muted); font-size: 0.85rem;">Estadísticas basadas en tus días laborales programados (excluyendo feriados).</p>
-          </div>
-          <div class="attendance-circle">
-            <span class="value">${stats.attendanceRate}%</span>
-            <span class="label">Asistencia</span>
-          </div>
-        </div>
-
-        <div class="convention-grid">
-          ${Object.keys(limits).map(type => {
-            const used = stats.licenseUsage[type] || 0;
-            const limit = selectedMonth !== null ? limits[type].month : limits[type].year;
-            const percentage = Math.min((used / limit) * 100, 100);
-            const statusClass = percentage >= 100 ? 'progress-danger' : (percentage > 70 ? 'progress-warning' : 'progress-success');
-            
-            return `
-              <div class="limit-card">
-                <div class="limit-header">
-                  <span>${type}</span>
-                  <span style="font-weight: bold;">${used} / ${limit}</span>
-                </div>
-                <div class="progress-bar-container">
-                  <div class="progress-bar-fill ${statusClass}" style="width: ${percentage}%"></div>
-                </div>
-                <div style="font-size: 0.7rem; color: var(--text-muted); display: flex; justify-content: space-between;">
-                  <span>Uso ${selectedMonth !== null ? 'mensual' : 'anual'}</span>
-                  <span>${Math.round(percentage)}%</span>
-                </div>
-              </div>
-            `;
-          }).join('')}
+      <div class="card glass" style="padding: 1rem; border-left: 4px solid var(--secondary);">
+        <h4 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="award"></i> Info. Convenio (Mes Filtro)</h4>
+        <div style="display: flex; gap: 2rem;">
+          <div><span style="font-size: 0.75rem; color: var(--text-muted);">Asistencia:</span> <strong style="color: var(--success);">${stats.attendanceRate}%</strong></div>
+          <div><span style="font-size: 0.75rem; color: var(--text-muted);">Tardanzas:</span> <strong>${stats.late}</strong></div>
+          <div><span style="font-size: 0.75rem; color: var(--text-muted);">Ausencias:</span> <strong style="color: var(--danger);">${stats.absent}</strong></div>
         </div>
       </div>
     `;
     if (window.lucide) window.lucide.createIcons();
   }
 
-  function renderStats(records) {
-    const total = records.length;
-    const present = records.filter(r => r.status === 'present').length;
-    const late = records.filter(r => r.status === 'late' && !r.is_justified).length;
-    const justified = records.filter(r => r.status === 'justified' || r.is_justified).length;
+  function renderStats(records, holidayMap) {
+    let totalHours = 0;
+    records.forEach(r => {
+      if (r.check_in && r.check_out) {
+        totalHours += getDurationHours(r.check_in, r.check_out);
+      }
+    });
+
+    const daysWithAttendance = new Set(records.filter(r => r.check_in).map(r => r.created_at.split('T')[0])).size;
+    const averageHours = daysWithAttendance > 0 ? (totalHours / daysWithAttendance).toFixed(1) : 0;
 
     const statsContainer = container.querySelector('#reports-stats-container');
-    const nonWorkingDays = records.reduce((acc, r) => {
-       const isHoliday = holidayMap.has(new Date(r.check_in || r.created_at).toISOString().split('T')[0]);
-       return acc + (isHoliday ? 1 : 0);
-    }, 0);
-
     statsContainer.innerHTML = `
       <div class="card glass stat-card">
-        <span class="stat-label">Total Entradas</span>
-        <span class="stat-value">${total}</span>
+        <span class="stat-label">Total Horas</span>
+        <span class="stat-value" style="color: var(--secondary);">${totalHours.toFixed(1)}h</span>
       </div>
       <div class="card glass stat-card">
-        <span class="stat-label">Presentes</span>
-        <span class="stat-value" style="background: var(--success); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">${present}</span>
+        <span class="stat-label">Promedio Diario</span>
+        <span class="stat-value" style="color: var(--primary-light);">${averageHours}h</span>
       </div>
       <div class="card glass stat-card">
-        <span class="stat-label">Feriados / No Lab.</span>
-        <span class="stat-value" style="background: var(--secondary); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">${nonWorkingDays}</span>
+        <span class="stat-label">Tardanzas</span>
+        <span class="stat-value" style="color: var(--warning);">${records.filter(r => r.status === 'late').length}</span>
       </div>
       <div class="card glass stat-card">
         <span class="stat-label">Justificadas</span>
-        <span class="stat-value" style="background: #10b981; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">${justified}</span>
+        <span class="stat-value" style="color: var(--success);">${records.filter(r => r.is_justified).length}</span>
       </div>
     `;
   }
 
-  function renderTable(records) {
+  function renderTable(records, holidayMap) {
     const tbody = container.querySelector('#reports-table-body');
     if (!records.length) {
       tbody.innerHTML = '<tr><td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-muted);">Sin registros en este periodo.</td></tr>';
       return;
     }
+
+    const statusLabels = {
+      'present': 'PRESENTE',
+      'late': 'TARDE',
+      'absent': 'AUSENTE',
+      'justified': 'JUSTIFICADO'
+    };
+
     tbody.innerHTML = records.map(r => {
       const date = r.check_in || r.created_at;
       const recIsoDate = new Date(date).toISOString().split('T')[0];
       const holidayInfo = holidayMap.get(recIsoDate);
       
-      const isJustified = r.is_justified || r.status === 'justified' || !!holidayInfo;
-      const justifiedBy = holidayInfo ? 'CALENDARIO' : (r.auditor ? `${r.auditor.last_name}, ${r.auditor.first_name[0]}.` : 'N/A');
-      
-      let actionBtn = '--';
-      const canJustifyAbsent = isDirector && r.status === 'absent' && !holidayInfo;
-      const canJustifyLate = r.status === 'late' && !r.is_justified && !holidayInfo;
+      const duration = (r.check_in && r.check_out) ? getDurationHours(r.check_in, r.check_out) : 0;
+      const displayDuration = duration > 0 ? `${duration}h` : (r.check_in && !r.check_out ? '<span style="color: var(--warning); font-size: 0.7rem;">En curso / Sín salida</span>' : '--');
 
-      if ((canJustifyAbsent || canJustifyLate) && !isJustified) {
-        actionBtn = `<button class="justify-btn" data-id="${r.id}" data-name="${r.profiles?.last_name || 'User'}" data-status="${r.status}" style="width: auto; padding: 0.25rem 0.5rem; background: var(--secondary); font-size: 0.75rem;">Justificar</button>`;
-      }
+      const statusKey = r.is_justified ? 'justified' : (r.status || 'absent');
+      const displayStatus = holidayInfo ? holidayInfo.type.toUpperCase() : (statusLabels[statusKey] || statusKey.toUpperCase());
 
       return `
         <tr style="border-bottom: 1px solid var(--glass-border);">
-          <td style="padding: 1rem;">${new Date(date).toLocaleDateString()}</td>
-          <td style="padding: 1rem;">${r.profiles?.last_name || 'N/A'}, ${r.profiles?.first_name || 'N/A'}</td>
+          <td style="padding: 1rem;">
+            <div style="font-weight: 500;">${new Date(date).toLocaleDateString()}</div>
+            <div style="font-size: 0.7rem; color: var(--text-muted);">${new Date(date).toLocaleDateString([], {weekday: 'short'})}</div>
+          </td>
+          <td style="padding: 1rem;">
+            <div style="font-weight: 500;">${r.profiles?.last_name || 'N/A'}, ${r.profiles?.first_name || 'N/A'}</div>
+            <div style="font-size: 0.7rem; color: var(--text-dim);">L: ${r.profiles?.legajo_utn || '---'}</div>
+          </td>
           <td style="padding: 1rem;">${r.check_in ? new Date(r.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}</td>
+          <td style="padding: 1rem;">${r.check_out ? new Date(r.check_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '<span style="color: var(--text-dim);">--:--</span>'}</td>
+          <td style="padding: 1rem; font-weight: 600;">${displayDuration}</td>
           <td style="padding: 1rem;">
-            <span class="badge ${holidayInfo ? 'badge-justified' : 'badge-' + r.status}">${holidayInfo ? holidayInfo.type.toUpperCase() : (r.status === 'present' ? 'PRESENTO' : (r.status === 'late' ? 'TARDANZA' : (r.status === 'justified' ? 'JUSTIFICADO' : 'AUSENTE')))}</span>
+            <span class="badge ${holidayInfo ? 'badge-justified' : 'badge-' + statusKey}">
+              ${displayStatus}
+            </span>
           </td>
           <td style="padding: 1rem;">
-            ${r.document_path ? `<a href="${supabase.storage.from('justificativos').getPublicUrl(r.document_path).data.publicUrl}" target="_blank" title="Ver comprobante"><i data-lucide="file-text" style="width: 18px; color: var(--secondary);"></i></a>` : '--'}
+            <div style="display: flex; gap: 0.5rem; justify-content: center;">
+              <button class="edit-btn btn-icon-sq" data-id="${r.id}" title="Editar / Justificar" style="background: var(--surface);">
+                <i data-lucide="edit-3" style="width: 14px;"></i>
+              </button>
+              <button class="delete-btn btn-icon-sq" data-id="${r.id}" title="Eliminar" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2);">
+                <i data-lucide="trash-2" style="width: 14px;"></i>
+              </button>
+            </div>
           </td>
-          <td style="padding: 1rem;">
-            ${isJustified ? 
-              `<div style="font-size: 0.75rem;">
-                <span class="badge badge-justified" title="${holidayInfo ? holidayInfo.description : (r.justification_note || '')}">JUSTIFICADO</span>
-                <div style="color: var(--text-muted); margin-top: 4px;">Por: ${justifiedBy}</div>
-              </div>` : 
-              (r.status === 'late' || r.status === 'absent' ? `<span class="badge badge-pending">PENDIENTE</span>` : '--')
-            }
-          </td>
-          <td style="padding: 1rem;">${actionBtn}</td>
         </tr>
       `;
     }).join('');
 
-    tbody.querySelectorAll('.justify-btn').forEach(btn => {
-      btn.onclick = () => {
-        const { id, name, status } = btn.dataset;
-        container.querySelector('#justify-record-id').value = id;
-        container.querySelector('#justify-user-name').textContent = `Usuario: ${name}`;
-        container.querySelector('#justify-record-type').textContent = `Justificando: ${status === 'absent' ? 'AUSENTE (Acción de Director)' : 'TARDANZA'}`;
-        container.querySelector('#justify-modal').style.display = 'flex';
-      };
+    // Attach Event Listeners for Table Actions
+    tbody.querySelectorAll('.edit-btn').forEach(btn => {
+      btn.onclick = () => openEditModal(records.find(r => r.id === btn.dataset.id));
     });
+
+    tbody.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.onclick = () => deleteRecord(btn.dataset.id);
+    });
+
+    if (window.lucide) window.lucide.createIcons();
   }
 
-  container.querySelector('#close-justify-modal').onclick = () => {
-    container.querySelector('#justify-modal').style.display = 'none';
-  };
+  async function openEditModal(record) {
+    const modal = container.querySelector('#edit-record-modal');
+    const checkInTime = record.check_in ? new Date(record.check_in).toISOString().slice(0, 16) : '';
+    const checkOutTime = record.check_out ? new Date(record.check_out).toISOString().slice(0, 16) : '';
 
-  container.querySelector('#justify-form').onsubmit = async (e) => {
-    e.preventDefault();
-    const id = container.querySelector('#justify-record-id').value;
-    const note = container.querySelector('#justify-note').value;
-    const file = container.querySelector('#justify-file').files[0];
-    const btn = container.querySelector('#save-justify');
+    modal.innerHTML = `
+      <div class="card glass modal-content" style="max-width: 450px; width: 90%;">
+        <h3>Editar Fichaje</h3>
+        <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">${record.profiles?.last_name}, ${record.profiles?.first_name}</p>
+        
+        <form id="edit-record-form">
+          <div class="form-group">
+            <label>Entrada</label>
+            <input type="datetime-local" id="edit-check-in" value="${checkInTime}">
+          </div>
+          <div class="form-group">
+            <label>Salida</label>
+            <input type="datetime-local" id="edit-check-out" value="${checkOutTime}">
+          </div>
+          <div class="form-group">
+            <label>Estado / Justificación</label>
+            <select id="edit-status">
+              <option value="present" ${record.status === 'present' ? 'selected' : ''}>Presente (Normal)</option>
+              <option value="late" ${record.status === 'late' ? 'selected' : ''}>Tardanza</option>
+              <option value="justified" ${record.status === 'justified' || record.is_justified ? 'selected' : ''}>Justificado</option>
+              <option value="absent" ${record.status === 'absent' ? 'selected' : ''}>Ausente</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Notas Internas</label>
+            <textarea id="edit-notes" placeholder="Motivo del cambio..." style="width: 100%; min-height: 60px; background: var(--surface); color: white; border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.5rem; font-size: 0.85rem;">${record.justification_note || ''}</textarea>
+          </div>
+          <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+            <button type="submit" class="btn-primary">Guardar Cambios</button>
+            <button type="button" id="close-edit-modal" class="btn-secondary">Cancelar</button>
+          </div>
+        </form>
+      </div>
+    `;
 
-    btn.disabled = true;
-    btn.textContent = 'Guardando...';
+    modal.style.display = 'flex';
+    if (window.lucide) window.lucide.createIcons();
 
-    let documentPath = null;
+    container.querySelector('#close-edit-modal').onclick = () => modal.style.display = 'none';
 
-    if (file) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${id}_${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('justificativos')
-        .upload(fileName, file);
+    container.querySelector('#edit-record-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const inVal = document.querySelector('#edit-check-in').value;
+      const outVal = document.querySelector('#edit-check-out').value;
+      const status = document.querySelector('#edit-status').value;
+      const notes = document.querySelector('#edit-notes').value;
 
-      if (uploadError) {
-        showNotification('Error al subir archivo: ' + uploadError.message, 'error');
-        btn.disabled = false;
-        btn.textContent = 'Confirmar Justificación';
-        return;
+      const { error } = await supabase
+        .from('attendance')
+        .update({
+          check_in: inVal ? new Date(inVal).toISOString() : null,
+          check_out: outVal ? new Date(outVal).toISOString() : null,
+          status: status,
+          is_justified: status === 'justified',
+          justification_note: notes,
+          justified_by: user.id
+        })
+        .eq('id', record.id);
+
+      if (error) showNotification(error.message, 'error');
+      else {
+        showNotification('Registro actualizado correctamente', 'success');
+        modal.style.display = 'none';
+        loadData();
       }
-      documentPath = uploadData.path;
-    }
+    };
+  }
 
-    const { error } = await supabase
-      .from('attendance')
-      .update({ 
-        is_justified: true, 
-        justification_note: note,
-        document_path: documentPath,
-        status: 'justified',
-        justified_by: user.id
-      })
-      .eq('id', id);
-
-    if (error) {
-      showNotification(error.message, 'error');
-    } else {
-      showNotification('Registro justificado y auditado', 'success');
-      container.querySelector('#justify-modal').style.display = 'none';
+  async function deleteRecord(id) {
+    if (!confirm('¿Estás seguro de eliminar este registro de fichaje? Esta acción no se puede deshacer.')) return;
+    const { error } = await supabase.from('attendance').delete().eq('id', id);
+    if (error) showNotification(error.message, 'error');
+    else {
+      showNotification('Registro eliminado', 'warning');
       loadData();
     }
-    btn.disabled = false;
-    btn.textContent = 'Confirmar Justificación';
-  };
+  }
 
-  let chartInstance = null;
+  async function openManualFichajeModal() {
+    const modal = container.querySelector('#edit-record-modal');
+    modal.innerHTML = `
+      <div class="card glass modal-content" style="max-width: 450px; width: 90%;">
+        <h3>Agregar Fichaje Manual</h3>
+        <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">Registrar una entrada/salida olvidada.</p>
+        
+        <form id="manual-fichaje-form">
+          <div class="form-group">
+            <label>Usuario</label>
+            <select id="manual-user-id" required>
+              <option value="">Seleccionar persona...</option>
+              ${users?.map(u => `<option value="${u.id}">${u.last_name}, ${u.first_name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Entrada</label>
+            <input type="datetime-local" id="manual-check-in" required>
+          </div>
+          <div class="form-group">
+            <label>Salida (Opcional)</label>
+            <input type="datetime-local" id="manual-check-out">
+          </div>
+          <div class="form-group">
+            <label>Nota de Auditoría</label>
+            <textarea id="manual-notes" placeholder="Razón de la carga manual..." required style="width: 100%; min-height: 60px; background: var(--surface); color: white; border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.5rem; font-size: 0.85rem;"></textarea>
+          </div>
+          <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+            <button type="submit" class="btn-primary">Crear Registro</button>
+            <button type="button" id="close-manual-modal" class="btn-secondary">Cancelar</button>
+          </div>
+        </form>
+      </div>
+    `;
 
-  function renderChart(records) {
-    const ctx = container.querySelector('#main-chart-canvas').getContext('2d');
-    
-    // Group by status
-    const stats = {
-      present: records.filter(r => r.status === 'present').length,
-      late: records.filter(r => r.status === 'late').length,
-      absent: records.filter(r => r.status === 'absent').length,
-      justified: records.filter(r => r.status === 'justified' || r.is_justified).length
+    modal.style.display = 'flex';
+    if (window.lucide) window.lucide.createIcons();
+    container.querySelector('#close-manual-modal').onclick = () => modal.style.display = 'none';
+
+    container.querySelector('#manual-fichaje-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const userId = document.querySelector('#manual-user-id').value;
+      const inVal = document.querySelector('#manual-check-in').value;
+      const outVal = document.querySelector('#manual-check-out').value;
+      const notes = document.querySelector('#manual-notes').value;
+
+      const { error } = await supabase
+        .from('attendance')
+        .insert({
+          user_id: userId,
+          check_in: new Date(inVal).toISOString(),
+          check_out: outVal ? new Date(outVal).toISOString() : null,
+          status: 'present',
+          is_justified: true,
+          justification_note: `CARGA MANUAL: ${notes}`,
+          justified_by: user.id
+        });
+
+      if (error) showNotification(error.message, 'error');
+      else {
+        showNotification('Registro creado con éxito', 'success');
+        modal.style.display = 'none';
+        loadData();
+      }
     };
+  }
 
-    if (chartInstance) {
-      chartInstance.destroy();
-    }
-
-    if (!records.length) {
+  // Exports and Basic Handlers
+  container.querySelector('#apply-filters').onclick = loadData;
+  container.querySelector('#add-manual-fichaje-btn').onclick = openManualFichajeModal;
+  
+  container.querySelector('#export-advanced-csv').onclick = () => {
+    // Basic export for current filtered records
+    const tableData = container.querySelectorAll('#reports-table-body tr');
+    if (!tableData.length || tableData[0].innerText.includes('Sin registros')) {
+      showNotification('No hay datos para exportar', 'warning');
       return;
     }
 
-    chartInstance = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: ['Presentes', 'Tardanzas', 'Ausentes', 'Justificados'],
-        datasets: [{
-          label: 'Frecuencia',
-          data: [stats.present, stats.late, stats.absent, stats.justified],
-          backgroundColor: [
-            'rgba(34, 197, 94, 0.6)', // Success
-            'rgba(245, 158, 11, 0.6)', // Warning
-            'rgba(239, 68, 68, 0.6)',  // Danger
-            'rgba(16, 185, 129, 0.6)'  // Justified
-          ],
-          borderColor: [
-            'rgb(34, 197, 94)',
-            'rgb(245, 158, 11)',
-            'rgb(239, 68, 68)',
-            'rgb(16, 185, 129)'
-          ],
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: false
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8'
-            }
-          },
-          x: {
-            grid: {
-              display: false
-            },
-            ticks: {
-              color: '#94a3b8'
-            }
-          }
-        }
-      }
-    });
-  }
-
-  container.querySelector('#apply-filters').onclick = loadData;
-  
-  container.querySelector('#export-advanced-pdf').onclick = () => {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    
-    doc.setFontSize(20);
-    doc.text('Planilla de Asistencia - UTN', 20, 20);
-    doc.setFontSize(10);
-    doc.text(`Generado: ${new Date().toLocaleString()}`, 20, 28);
-    doc.text(`Rango: ${startDate} al ${endDate}`, 20, 33);
-    
-    let y = 45;
-    doc.setFont(undefined, 'bold');
-    doc.text('Fecha', 20, y);
-    doc.text('Nombre', 50, y);
-    doc.text('Entrada', 100, y);
-    doc.text('Estado', 130, y);
-    doc.text('Nota', 160, y);
-    doc.line(20, y + 2, 190, y + 2);
-    
-    y += 10;
-    doc.setFont(undefined, 'normal');
-    
-    // Using current data from logic
-    const tableData = container.querySelectorAll('#reports-table-body tr');
+    let csv = "Fecha,Personal,Entrada,Salida,Duracion,Estado\n";
     tableData.forEach(row => {
       const cells = row.querySelectorAll('td');
-      if (y > 270) { doc.addPage(); y = 20; }
-      doc.text(cells[0].innerText, 20, y);
-      doc.text(cells[1].innerText.substring(0, 20), 50, y);
-      doc.text(cells[2].innerText, 100, y);
-      doc.text(cells[3].innerText, 130, y);
-      doc.text(cells[4].innerText.substring(0, 15), 160, y);
-      y += 8;
+      csv += `"${cells[0].innerText.replace('\n', ' ')}","${cells[1].innerText.replace('\n', ' ')}","${cells[2].innerText}","${cells[3].innerText}","${cells[4].innerText}","${cells[5].innerText}"\n`;
     });
-    
-    doc.save(`asistencia_utn_${new Date().toISOString().split('T')[0]}.pdf`);
-    showNotification('PDF generado con éxito', 'success');
-  };
 
-  container.querySelector('#export-advanced-csv').onclick = async () => {
-    showNotification('Generando reporte consolidado de toda la planta...', 'info');
-    
-    // Header for CSV
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "Legajo,Apellido,Nombre,Asistencia %,Presentes,Tardanzas,Ausentes,Justificados,Dias Laborales Esperados\n";
-
-    try {
-      for (const u of users) {
-        const stats = await getUserStats(u.id, selectedYear, selectedMonth);
-        const row = [
-          u.id.substring(0,8), // Legajo placeholder or u.legajo if exists
-          u.last_name,
-          u.first_name,
-          `${stats.attendanceRate}%`,
-          stats.present,
-          stats.late,
-          stats.absent,
-          stats.justified,
-          stats.expected_working_days
-        ].join(",");
-        csvContent += row + "\n";
-      }
-
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `Reporte_Consolidado_${selectedYear}_${selectedMonth || 'Anual'}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      showNotification('Reporte CSV generado con éxito', 'success');
-    } catch (err) {
-      showNotification('Error al generar CSV: ' + err.message, 'error');
-    }
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Resumen_Asistencia_${dateFrom}_al_${dateTo}.csv`;
+    link.click();
   };
 
   // Initial load

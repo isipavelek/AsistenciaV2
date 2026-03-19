@@ -70,7 +70,9 @@ async function init() {
   // Listen for auth changes
   supabase.auth.onAuthStateChange(async (event, newSession) => {
     session = newSession;
-    if (session) {
+    if (event === 'PASSWORD_RECOVERY') {
+      showResetPasswordModal();
+    } else if (session) {
       await fetchProfile();
       renderDashboard();
     } else {
@@ -845,7 +847,13 @@ function renderAdminSection() {
       <div class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
         
         <div class="card glass" style="border-top: 4px solid var(--accent);">
-          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="bar-chart-3"></i> Analitícas Avanzadas</h3>
+          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="bar-chart-big"></i> Resumen por Usuario</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0;">Estadísticas individuales, horas trabajadas y gestión de fichajes.</p>
+          <button id="nav-reports" style="margin-top: 1rem; background: var(--surface);">Ver Resumen</button>
+        </div>
+
+        <div class="card glass" style="border-top: 4px solid var(--primary-light);">
+          <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="trending-up"></i> Analitícas Avanzadas</h3>
           <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0;">Estadísticas generales y tendencias de asistencia.</p>
           <button id="nav-analytics" style="margin-top: 1rem; background: var(--surface);">Ver Gráficos</button>
         </div>
@@ -995,36 +1003,54 @@ async function handleClockIn(pos) {
   
   const { data: schedule } = await supabase
     .from('user_schedules')
-    .select('start_time')
+    .select('start_time, end_time')
     .eq('user_id', session.user.id)
     .eq('day_of_week', dayOfWeek)
     .single();
 
-  let isLate = false;
   const rules = settings?.business_rules;
   const tolerance = rules?.tolerance_minutes || 15;
+  let classification = null;
+  let isLate = false;
 
   if (schedule) {
     const [h, m] = schedule.start_time.split(':');
     const scheduledEntry = new Date();
     scheduledEntry.setHours(parseInt(h), parseInt(m), 0, 0);
-    const toleranceLimit = new Date(scheduledEntry.getTime() + tolerance * 60000);
-    isLate = entryTime > toleranceLimit;
-  } else {
-    const standardHour = 8;
-    const standardEntry = new Date();
-    standardEntry.setHours(standardHour, 0, 0, 0);
-    const toleranceLimit = new Date(standardEntry.getTime() + tolerance * 60000);
-    isLate = entryTime > toleranceLimit;
+    
+    const diffMins = (entryTime - scheduledEntry) / 60000;
+    
+    if (diffMins > tolerance) {
+      classification = 'Entrada Tardía';
+      isLate = true;
+    } else if (diffMins < -tolerance) {
+      classification = 'Entrada Temprana';
+    }
   }
 
+  if (classification) {
+    showClockNotificationModal('Entrada', classification, async (note) => {
+      await saveClockIn(pos, entryTime, isLate, classification, note);
+    }, () => {
+      btn.disabled = false;
+      btn.textContent = 'Fichar Entrada';
+    });
+  } else {
+    await saveClockIn(pos, entryTime, isLate, null, '');
+  }
+}
+
+async function saveClockIn(pos, entryTime, isLate, classification, note) {
+  const btn = document.querySelector('#clock-in-btn');
   const { error } = await supabase.from('attendance').insert({
     user_id: session.user.id,
     check_in: entryTime.toISOString(),
     lat: pos.lat,
     long: pos.long,
     is_late: isLate,
-    status: isLate ? 'late' : 'present'
+    status: isLate ? 'late' : 'present',
+    justification_note: classification ? `${classification.toUpperCase()}: ${note}` : note,
+    metadata: { classification }
   });
 
   if (error) {
@@ -1038,14 +1064,100 @@ async function handleClockIn(pos) {
   }
 }
 
+function showClockNotificationModal(type, detectedClassification, onSubmit, onCancel) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay animate-in';
+  modal.innerHTML = `
+    <div class="card glass modal-content" style="max-width: 400px; width: 90%;">
+      <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        <i data-lucide="alert-circle" style="color: var(--warning);"></i> Aviso de ${type}
+      </h3>
+      <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+        Se ha detectado una <strong>${detectedClassification}</strong> fuera de la tolerancia permitida.
+      </p>
+      
+      <div class="form-group">
+        <label>Tipo de Registro</label>
+        <select id="clock-classification" style="width: 100%; background: var(--surface); color: white; border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.5rem;">
+          <option value="Entrada Temprana" ${detectedClassification === 'Entrada Temprana' ? 'selected' : ''}>Entrada Temprana</option>
+          <option value="Entrada Tardía" ${detectedClassification === 'Entrada Tardía' ? 'selected' : ''}>Entrada Tardía</option>
+          <option value="Salida Anticipada" ${detectedClassification === 'Salida Anticipada' ? 'selected' : ''}>Salida Anticipada</option>
+          <option value="Salida Después de Hora" ${detectedClassification === 'Salida Después de Hora' ? 'selected' : ''}>Salida Después de Hora</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Descripción / Motivo (Opcional)</label>
+        <textarea id="clock-note" placeholder="Ej: Tráfico, compensación de horas..." style="width: 100%; min-height: 80px; background: var(--surface); color: white; border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.5rem; font-size: 0.875rem;"></textarea>
+      </div>
+
+      <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+        <button id="confirm-clock" style="flex: 1; background: var(--accent-gradient);">Confirmar y Fichar</button>
+        <button id="cancel-clock" style="flex: 1; background: var(--surface);">Cancelar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  if (window.lucide) window.lucide.createIcons();
+
+  modal.querySelector('#confirm-clock').onclick = () => {
+    const classification = modal.querySelector('#clock-classification').value;
+    const note = modal.querySelector('#clock-note').value;
+    modal.remove();
+    onSubmit(note, classification);
+  };
+
+  modal.querySelector('#cancel-clock').onclick = () => {
+    modal.remove();
+    if (onCancel) onCancel();
+  };
+}
+
 async function handleClockOut(id) {
+  const exitTime = new Date();
+  const dayOfWeek = exitTime.getDay();
+
+  const { data: schedule } = await supabase
+    .from('user_schedules')
+    .select('end_time')
+    .eq('user_id', session.user.id)
+    .eq('day_of_week', dayOfWeek)
+    .single();
+
+  const rules = settings?.business_rules;
+  const tolerance = rules?.tolerance_minutes || 15;
+  let classification = null;
+
+  if (schedule && schedule.end_time) {
+    const [h, m] = schedule.end_time.split(':');
+    const scheduledExit = new Date();
+    scheduledExit.setHours(parseInt(h), parseInt(m), 0, 0);
+
+    const diffMins = (exitTime - scheduledExit) / 60000;
+
+    if (diffMins > tolerance) {
+      classification = 'Salida Después de Hora';
+    } else if (diffMins < -tolerance) {
+      classification = 'Salida Anticipada';
+    }
+  }
+
   const modal = document.createElement('div');
   modal.className = 'modal-overlay animate-in';
   modal.innerHTML = `
     <div class="card glass modal-content" style="max-width: 450px; text-align: center;">
       <h3 style="margin-bottom: 0.5rem;">🎉 ¡Excelente jornada!</h3>
-      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem;">¿Cómo calificarías tu día hoy?</p>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">¿Cómo calificarías tu día hoy?</p>
       
+      ${classification ? `
+        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; padding: 0.75rem; margin-bottom: 1.5rem; text-align: left;">
+          <p style="font-size: 0.8rem; color: var(--warning); font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="alert-triangle" style="width: 14px;"></i> Aviso de Salida
+          </p>
+          <p style="font-size: 0.75rem; color: var(--text-muted);">Has fichado con una <strong>${classification}</strong>. Por favor, indica el motivo en el comentario.</p>
+        </div>
+      ` : ''}
+
       <div style="display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 2rem;">
         <button class="mood-btn" data-mood="excellent" style="background: transparent; border: 2px solid transparent; flex: 1; padding: 0.5rem; border-radius: 12px; transition: all 0.3s;">
           <div style="font-size: 2rem;">🤩</div>
@@ -1070,8 +1182,8 @@ async function handleClockOut(id) {
       </div>
 
       <div class="form-group" style="text-align: left;">
-        <label style="font-size: 0.8rem; opacity: 0.7;">Comentario opcional (¿Algo que quieras destacar?)</label>
-        <textarea id="mood-note" placeholder="Escribe aquí..." style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); width: 100%; min-height: 80px; margin-top: 0.5rem; color: white;"></textarea>
+        <label style="font-size: 0.8rem; opacity: 0.7;">${classification ? 'Motivo de la salida y comentario' : 'Comentario opcional'}</label>
+        <textarea id="mood-note" placeholder="${classification ? 'Ej: Finalización de tareas, permiso especial...' : 'Escribe aquí...'}" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); width: 100%; min-height: 80px; margin-top: 0.5rem; color: white;"></textarea>
       </div>
 
       <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
@@ -1082,6 +1194,7 @@ async function handleClockOut(id) {
   `;
 
   document.body.appendChild(modal);
+  if (window.lucide) window.lucide.createIcons();
   let selectedMood = null;
 
   const moodBtns = modal.querySelectorAll('.mood-btn');
@@ -1101,11 +1214,17 @@ async function handleClockOut(id) {
     btnMain.textContent = 'Fichando...';
     modal.remove();
 
+    const fullNote = classification ? `${classification.toUpperCase()}: ${note}` : note;
+
     const { error } = await supabase.from('attendance')
       .update({ 
         check_out: new Date().toISOString(),
         mood: mood,
-        mood_note: note
+        mood_note: fullNote,
+        metadata: { 
+          ...((await supabase.from('attendance').select('metadata').eq('id', id).single()).data?.metadata || {}),
+          clock_out_classification: classification 
+        }
       })
       .eq('id', id);
 
@@ -1269,14 +1388,28 @@ function openQRScannerModal() {
         statusText.style.color = 'var(--secondary)';
         statusText.style.display = 'block';
 
+        console.log("🔍 Iniciando validación de QR:", cleanToken);
+
         try {
-          const { data, error } = await supabase.rpc('registrar_fichaje_qr', { 
+          // Timeout de 10 segundos para la validación
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout de conexión (10s)')), 10000)
+          );
+
+          const rpcPromise = supabase.rpc('registrar_fichaje_qr', { 
             p_user_id: session.user.id, 
             p_token: cleanToken 
           });
 
-          if (error) throw error;
+          const { data, error } = await Promise.race([rpcPromise, timeoutPromise]);
+
+          if (error) {
+            console.error("❌ Error de Supabase:", error);
+            throw error;
+          }
           
+          console.log("✅ Respuesta de RPC:", data);
+
           if (data && data.exito) {
             showNotification(data.mensaje, 'success');
             if (html5QrCode.isScanning) await html5QrCode.stop();
@@ -1284,19 +1417,19 @@ function openQRScannerModal() {
             initClockIn();
             fetchStats();
           } else {
-            console.warn("RPC falló:", data);
-            showNotification(data?.mensaje || 'QR inválido.', 'error');
-            statusText.textContent = data?.mensaje || 'QR inválido. Reintenta.';
+            console.warn("⚠️ RPC devolvió fallo:", data);
+            const msg = data?.mensaje || 'QR inválido.';
+            showNotification(msg, 'error');
+            statusText.textContent = msg + ' Reintenta.';
             statusText.style.color = 'var(--danger)';
             setTimeout(() => { isProcessing = false; }, 2000); 
           }
         } catch (err) {
-          console.error("Error en RPC:", err);
-          isProcessing = false;
-          showNotification('Error de validación', 'error');
-          statusText.textContent = 'Error de conexión. Reintenta.';
+          console.error("🔥 Error crítico en validación QR:", err);
+          showNotification(err.message || 'Error de validación', 'error');
+          statusText.textContent = (err.message.includes('Timeout') ? 'Tiempo agotado.' : 'Error de conexión.') + ' Reintenta.';
           statusText.style.color = 'var(--danger)';
-          setTimeout(() => { isProcessing = false; }, 2000);
+          setTimeout(() => { isProcessing = false; }, 3000);
         }
       });
     } catch (err) {
@@ -1343,5 +1476,71 @@ function openQRScannerModal() {
   });
 }
 
-// Initialize application
+function showResetPasswordModal() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay animate-in';
+  modal.innerHTML = `
+    <div class="card glass modal-content" style="max-width: 400px; width: 90%;">
+      <h3 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        <i data-lucide="key"></i> Nueva Contraseña
+      </h3>
+      <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+        Por favor, ingresa tu nueva contraseña para completar el reseteo.
+      </p>
+      <div class="form-group">
+        <label for="new-password">Nueva Contraseña</label>
+        <input type="password" id="new-password" required placeholder="••••••••" style="width: 100%;">
+      </div>
+      <div class="form-group">
+        <label for="confirm-password">Confirmar Contraseña</label>
+        <input type="password" id="confirm-password" required placeholder="••••••••" style="width: 100%;">
+      </div>
+      <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+        <button id="cancel-reset" style="flex: 1; background: var(--surface);">Cancelar</button>
+        <button id="confirm-reset" style="flex: 2; background: var(--accent-gradient);">Actualizar Contraseña</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  if (window.lucide) window.lucide.createIcons();
+
+  const confirmBtn = modal.querySelector('#confirm-reset');
+  const cancelBtn = modal.querySelector('#cancel-reset');
+
+  confirmBtn.onclick = async () => {
+    const password = modal.querySelector('#new-password').value;
+    const confirm = modal.querySelector('#confirm-password').value;
+
+    if (!password || password.length < 6) {
+      showNotification('La contraseña debe tener al menos 6 caracteres', 'error');
+      return;
+    }
+
+    if (password !== confirm) {
+      showNotification('Las contraseñas no coinciden', 'error');
+      return;
+    }
+
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Actualizando...';
+
+    const { error } = await supabase.auth.updateUser({ password });
+
+    if (error) {
+      showNotification('Error: ' + error.message, 'error');
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Actualizar Contraseña';
+    } else {
+      showNotification('Contraseña actualizada con éxito', 'success');
+      modal.remove();
+      // En PASSWORD_RECOVERY ya tenemos sesión, pero a veces es mejor forzar login neto
+      await supabase.auth.signOut();
+      renderAuth();
+    }
+  };
+
+  cancelBtn.onclick = () => modal.remove();
+}
+
 init();
