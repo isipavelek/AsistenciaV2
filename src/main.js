@@ -1207,7 +1207,14 @@ function openQRScannerModal() {
   document.body.appendChild(modal);
   if (window.lucide) window.lucide.createIcons();
 
-  const scanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+  // Configuración del escáner - forzamos cámara trasera (environment)
+  const scanner = new Html5QrcodeScanner("qr-reader", { 
+    fps: 10, 
+    qrbox: { width: 250, height: 250 },
+    videoConstraints: {
+      facingMode: "environment"
+    }
+  }, false);
   let isProcessing = false;
 
   scanner.render(async (decodedText) => {

@@ -2,10 +2,26 @@
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <U8g2lib.h>
+#include <SPI.h>
 #include <qrcode.h>
 
-// Configuración de la pantalla SH1106 por I2C
-U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
+// Configuración de la pantalla gráfica HX1230 (96x68)
+// Pines SPI (Software SPI 3-wire) - Compatibles con la conexión anterior:
+// SCK/CLK  -> D5 (GPIO 14)
+// SDA/DIN  -> D7 (GPIO 13)
+// CS/CE    -> D8 (GPIO 15)
+// RES/RST  -> D4 (GPIO 2)
+// (El pin DC/A0 conectado a D3 ya no es necesario)
+#define HX1230_CLK 14
+#define HX1230_DIN 13
+#define HX1230_CS  15
+#define HX1230_RST 2
+
+#define PIN_LUZ D1 // (O el pin que elijas)
+
+
+// Constructor U8g2 para HX1230 (Framebuffer en RAM, Software SPI 3 hilos)
+U8G2_HX1230_96X68_F_3W_SW_SPI u8g2(U8G2_R0, HX1230_CLK, HX1230_DIN, HX1230_CS, HX1230_RST);
 
 // Cambia estos datos por los de tu red WiFi
 const char* ssid = "Isi_WiFi_2.4G";
@@ -18,13 +34,17 @@ const char* supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 unsigned long lastUpdate = 0;
 const long updateInterval = 10000; // 10 segundos
 
-void setup() {
+void setup() {  
   Serial.begin(115200);
+  pinMode(PIN_LUZ, OUTPUT);
+  digitalWrite(PIN_LUZ, HIGH); // Para encenderla al inicio
+  // Inicializa la pantalla HX1230
   u8g2.begin();
+  u8g2.setContrast(150); // <-- Sube este valor (hasta 255) si quieres los píxeles más "fuertes"/oscuros
+  u8g2.setFont(u8g2_font_6x10_tf);
   
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_ncenB08_tr);
-  u8g2.drawStr(0, 20, "Conectando WiFi...");
+  u8g2.drawStr(10, 34, "Conectando...");
   u8g2.sendBuffer();
 
   WiFi.begin(ssid, password);
@@ -37,7 +57,7 @@ void setup() {
   Serial.println("WiFi conectado");
   
   u8g2.clearBuffer();
-  u8g2.drawStr(0, 20, "WiFi OK!");
+  u8g2.drawStr(25, 34, "WiFi OK!");
   u8g2.sendBuffer();
   delay(1000);
 }
@@ -74,8 +94,7 @@ void loop() {
         
         // Si hay error, mostrar en pantalla
         u8g2.clearBuffer();
-        u8g2.setFont(u8g2_font_ncenB08_tr);
-        u8g2.drawStr(10, 30, "Error API");
+        u8g2.drawStr(20, 34, "Error API");
         u8g2.sendBuffer();
       }
       http.end();
@@ -90,16 +109,16 @@ void mostrarQR(String texto) {
 
   u8g2.clearBuffer();
   
-  int scale = 2;
-  int startX = (128 - (qrcode.size * scale)) / 2;
-  int startY = (64 - (qrcode.size * scale)) / 2;
+  // La pantalla HX1230 usa una resolución de 96x68
+  // QR version 3 tiene 29x29 módulos.
+  int scale = 2; // Escala 2 ocupa 58x58 píxeles
+  int startX = (96 - (qrcode.size * scale)) / 2;
+  int startY = (68 - (qrcode.size * scale)) / 2;
 
-  // Fondo blanco (para que la app cámara lo lea rápido)
+  // En pantallas monocromas, dibujamos directamente los módulos (color 1)
   u8g2.setDrawColor(1);
-  u8g2.drawBox(startX - 2, startY - 2, (qrcode.size * scale) + 4, (qrcode.size * scale) + 4);
 
-  // Cuadritos del QR negros
-  u8g2.setDrawColor(0);
+  // Cuadritos del QR
   for (uint8_t y = 0; y < qrcode.size; y++) {
     for (uint8_t x = 0; x < qrcode.size; x++) {
       if (qrcode_getModule(&qrcode, x, y)) {
@@ -109,5 +128,6 @@ void mostrarQR(String texto) {
   }
   
   u8g2.sendBuffer();
+  
   Serial.println("Nuevo QR mostrado: " + texto);
 }
