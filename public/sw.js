@@ -1,10 +1,11 @@
-const CACHE_NAME = 'asistencia-v2-cache-v2';
+const CACHE_NAME = 'asistencia-v2-cache-v3';
 const ASSETS = [
   '/',
   '/index.html',
   '/style.css',
   '/src/main.js',
-  '/logo.png',
+  '/pwa-icon-192.png',
+  '/pwa-icon-512.png',
   '/manifest.json'
 ];
 
