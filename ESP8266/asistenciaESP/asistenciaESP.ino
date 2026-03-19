@@ -38,10 +38,15 @@ void diagnosticoWiFi() {
     Serial.print(n);
     Serial.println(" redes encontradas:");
     for (int i = 0; i < n; ++i) {
-      // Imprime el nombre de la red, la potencia de señal y si tiene contraseña
+      String currentSSID = WiFi.SSID(i);
       Serial.print(i + 1);
       Serial.print(": ");
-      Serial.print(WiFi.SSID(i));
+      Serial.print(currentSSID);
+      
+      if (currentSSID == ssid) {
+        Serial.print(" [MATCH!] ");
+      }
+      
       Serial.print(" (");
       Serial.print(WiFi.RSSI(i));
       Serial.print(" dBm) ");
