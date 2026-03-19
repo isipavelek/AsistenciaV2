@@ -1195,7 +1195,7 @@ function openQRScannerModal() {
       <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; justify-content: center;">
         <i data-lucide="qr-code"></i> Escanear Asistencia
       </h3>
-      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Enfoca el código QR de la pantalla del terminal inteligente.</p>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Enfoca el código QR de la terminal inteligente.</p>
       
       <div id="qr-reader" style="width: 100%; border-radius: 12px; overflow: hidden; margin-bottom: 1.5rem; background: #000; min-height: 250px;"></div>
       
@@ -1207,26 +1207,25 @@ function openQRScannerModal() {
 
       <p id="qr-status" style="color: var(--warning); font-size: 0.9rem; margin-bottom: 1.5rem; display: none;"></p>
       
-      <button id="close-qr-modal" style="width: 100%; background: var(--surface); border: 1px solid var(--glass-border);">Cancelar / Usar Geolocalizador</button>
+      <button id="close-qr-modal" style="width: 100%; background: var(--surface); border: 1px solid var(--glass-border);">Cancelar</button>
     </div>
   `;
   document.body.appendChild(modal);
   if (window.lucide) window.lucide.createIcons();
 
   const html5QrCode = new Html5Qrcode("qr-reader");
-  let currentFacingMode = "environment";
   let isProcessing = false;
+  let cameras = [];
+  let currentCameraIndex = 0;
 
-  const startScanner = async (facingMode) => {
+  const startScanning = async (deviceIdOrConstraints) => {
     try {
       const config = { fps: 15, qrbox: { width: 250, height: 250 } };
-      await html5QrCode.start({ facingMode: facingMode }, config, async (decodedText) => {
+      await html5QrCode.start(deviceIdOrConstraints, config, async (decodedText) => {
         if (isProcessing) return;
         isProcessing = true;
         
-        // Limpiamos el texto por si tiene espacios o caracteres invisibles
         const cleanToken = decodedText.trim();
-        
         const statusText = modal.querySelector('#qr-status');
         statusText.textContent = "Validando código...";
         statusText.style.color = 'var(--secondary)';
@@ -1247,43 +1246,54 @@ function openQRScannerModal() {
             initClockIn();
             fetchStats();
           } else {
-            showNotification(data?.mensaje || 'QR inválido o expirado.', 'error');
+            showNotification(data?.mensaje || 'QR inválido.', 'error');
             statusText.textContent = data?.mensaje || 'QR inválido. Reintenta.';
             statusText.style.color = 'var(--danger)';
-            setTimeout(() => { isProcessing = false; }, 2000);
+            setTimeout(() => { isProcessing = true; isProcessing = false; }, 2000); // Pequeña demora para reintento
           }
         } catch (err) {
           console.error(err);
-          showNotification('Error validando QR', 'error');
-          statusText.textContent = 'Error de servidor. Reintenta.';
+          showNotification('Error de validación', 'error');
+          statusText.textContent = 'Error de conexión. Reintenta.';
           statusText.style.color = 'var(--danger)';
           setTimeout(() => { isProcessing = false; }, 2000);
         }
       });
     } catch (err) {
-      console.warn("No se pudo iniciar el escaneo:", err);
+      console.error("Error al iniciar cámara:", err);
       const statusText = modal.querySelector('#qr-status');
-      statusText.textContent = "Error al iniciar cámara: " + (err.message || "Permiso denegado");
+      statusText.textContent = "Error de cámara: " + (err.message || "Permiso denegado");
       statusText.style.display = "block";
     }
   };
 
-  // Detectar múltiples cámaras para mostrar el botón de cambio
-  Html5Qrcode.getCameras().then(cameras => {
-    if (cameras && cameras.length > 1) {
+  // Inicialización secuencial: Listar cámaras -> Pedir permiso -> Iniciar
+  Html5Qrcode.getCameras().then(results => {
+    cameras = results;
+    if (cameras && cameras.length > 0) {
       const switchBtn = modal.querySelector('#switch-camera-btn');
-      switchBtn.style.display = 'block';
-      switchBtn.onclick = async () => {
-        currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
-        if (html5QrCode.isScanning) {
-          await html5QrCode.stop();
-          startScanner(currentFacingMode);
-        }
-      };
+      if (cameras.length > 1) {
+        switchBtn.style.display = 'block';
+        switchBtn.onclick = async () => {
+          currentCameraIndex = (currentCameraIndex + 1) % cameras.length;
+          if (html5QrCode.isScanning) {
+            await html5QrCode.stop();
+            startScanning(cameras[currentCameraIndex].id);
+          }
+        };
+      }
+      // Preferimos la cámara trasera inicialmente
+      const backCamIndex = cameras.findIndex(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('trasera'));
+      currentCameraIndex = backCamIndex !== -1 ? backCamIndex : 0;
+      startScanning(cameras[currentCameraIndex].id);
+    } else {
+      // Intento fallback con facingMode si getCameras falla o devuelve vacío
+      startScanning({ facingMode: "environment" });
     }
-  }).catch(e => console.warn("Error al listar cámaras:", e));
-
-  startScanner(currentFacingMode);
+  }).catch(err => {
+    console.warn("Fallo al listar cámaras, intentando modo directo:", err);
+    startScanning({ facingMode: "environment" });
+  });
 
   modal.querySelector('#close-qr-modal').addEventListener('click', async () => {
     try {
