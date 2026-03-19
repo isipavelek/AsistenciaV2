@@ -18,8 +18,8 @@
 U8G2_HX1230_96X68_F_3W_SW_SPI u8g2(U8G2_R0, HX1230_CLK, HX1230_DIN, HX1230_CS, HX1230_RST);
 
 // WiFi
-const char* ssid = "Isi_WiFi_2.4G";
-const char* password = "12345casa";
+const char* ssid = "EST UTN";
+const char* password = "ObiWan2025";
 
 // Supabase
 const char* supabaseUrl = "https://gywcfuqrwubjqiowhbsn.supabase.co/rest/v1/qr_tokens";
@@ -38,7 +38,7 @@ void setup() {
   digitalWrite(PIN_LUZ, HIGH); 
 
   u8g2.begin();
-  u8g2.setContrast(255); 
+  u8g2.setContrast(150); 
   u8g2.setFont(u8g2_font_6x10_tf);
   
   u8g2.clearBuffer();
