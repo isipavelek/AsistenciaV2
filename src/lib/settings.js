@@ -13,7 +13,7 @@ export async function getSettings() {
     .from('settings')
     .select('*');
 
-  if (error) {
+  if (error || !data) {
     console.error('Error fetching settings:', error);
     // Return default settings if DB fails
     return {

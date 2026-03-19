@@ -44,37 +44,20 @@ let settings = null;
  */
 async function init() {
   console.log('--- APP INIT START ---');
-  try {
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    session = currentSession;
-    console.log('Session fetched:', session ? 'Active' : 'None');
 
-    // Load settings globally
-    settings = await getSettings();
-    console.log('Settings fetched');
-
-    if (session) {
-      console.log('User logged in, fetching profile...');
-      await fetchProfile();
-      console.log('Profile fetched, rendering dashboard...');
-      renderDashboard();
-    } else {
-      console.log('No session, rendering auth...');
-      renderAuth();
-    }
-  } catch (err) {
-    console.error('CRITICAL INIT ERROR:', err);
-    if (app) app.innerHTML = `<div style="padding:2rem; color:white;"><h1>Error Crítico</h1><p>${err.message}</p></div>`;
-  }
-
-  // Listen for auth changes
+  // Register auth listener immediately to catch PASSWORD_RECOVERY even if init setup fails
   supabase.auth.onAuthStateChange(async (event, newSession) => {
     session = newSession;
+    console.log('Auth event:', event, session ? 'Session active' : 'No session');
+    
     if (event === 'PASSWORD_RECOVERY') {
       showResetPasswordModal();
     } else if (session) {
-      await fetchProfile();
-      renderDashboard();
+      // Avoid fetching profile if we are in recovery state but haven't triggered the modal yet
+      if (!window.location.hash.includes('type=recovery')) {
+        await fetchProfile();
+        renderDashboard();
+      }
     } else {
       profile = null;
       renderAuth();
@@ -83,6 +66,29 @@ async function init() {
       }
     }
   });
+
+  try {
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    session = currentSession;
+
+    // Load settings globally
+    settings = await getSettings();
+
+    if (session) {
+      if (!window.location.hash.includes('type=recovery')) {
+        await fetchProfile();
+        renderDashboard();
+      }
+    } else {
+      renderAuth();
+    }
+  } catch (err) {
+    console.error('INIT ERROR:', err);
+    // Don't show hard error screen if it's a recovery attempt
+    if (!window.location.hash.includes('type=recovery')) {
+      if (app) app.innerHTML = `<div style="padding:2rem; color:white;"><h1>Error de Carga</h1><p>${err.message}</p></div>`;
+    }
+  }
 }
 
 async function fetchProfile() {
@@ -1544,18 +1550,27 @@ function showResetPasswordModal() {
     confirmBtn.disabled = true;
     confirmBtn.textContent = 'Actualizando...';
 
-    const { error } = await supabase.auth.updateUser({ password });
+    try {
+      console.log('Attempting to update password...');
+      const { error } = await supabase.auth.updateUser({ password });
 
-    if (error) {
-      showNotification('Error: ' + error.message, 'error');
+      if (error) {
+        console.error('Update password error:', error);
+        showNotification('Error: ' + error.message, 'error');
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Actualizar Contraseña';
+      } else {
+        console.log('Password updated successfully');
+        showNotification('Contraseña actualizada con éxito', 'success');
+        modal.remove();
+        await supabase.auth.signOut();
+        renderAuth();
+      }
+    } catch (err) {
+      console.error('Update password exception:', err);
+      showNotification('Error inesperado: ' + err.message, 'error');
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Actualizar Contraseña';
-    } else {
-      showNotification('Contraseña actualizada con éxito', 'success');
-      modal.remove();
-      // En PASSWORD_RECOVERY ya tenemos sesión, pero a veces es mejor forzar login neto
-      await supabase.auth.signOut();
-      renderAuth();
     }
   };
 
