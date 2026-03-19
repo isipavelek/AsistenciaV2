@@ -257,29 +257,28 @@ async function renderDashboard() {
   document.querySelector('#view-stats-btn').addEventListener('click', () => renderUserStats(document.querySelector('#main-content'), session.user.id));
   
   const installBtn = document.querySelector('#install-pwa-btn');
-  console.log('Install Button state:', { buttonExists: !!installBtn, hasPrompt: !!deferredPrompt });
-  
   if (installBtn && deferredPrompt) {
     installBtn.style.display = 'flex';
-    console.log('PWA Install button displayed');
   }
   
   installBtn?.addEventListener('click', async () => {
-    console.log('Install button clicked');
+    console.log('Click en Instalar App detectado');
     if (!deferredPrompt) {
-      console.warn('No deferredPrompt available on click');
-      alert('La opción de instalación no está disponible actualmente. Puedes instalarla desde el menú del navegador (tres puntos -> Instalar).');
+      alert('El navegador aún no ha verificado que la app sea instalable de forma automática o estás en una conexión no segura (se requiere localhost o HTTPS).');
       return;
     }
-    
     try {
+      console.log('Disparando prompt de instalación...');
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      console.log(`User response to install prompt: ${outcome}`);
+      console.log(`Respuesta del usuario: ${outcome}`);
+      if (outcome === 'accepted') {
+        installBtn.style.display = 'none';
+      }
       deferredPrompt = null;
-      installBtn.style.display = 'none';
     } catch (err) {
-      console.error('Error during PWA prompt:', err);
+      console.error('Fallo en el prompt:', err);
+      alert('Error al intentar abrir el diálogo de instalación: ' + err.message);
     }
   });
   
