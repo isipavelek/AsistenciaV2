@@ -28,11 +28,37 @@ const char* supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 unsigned long lastUpdate = 0;
 const long updateInterval = 10000; // 10 segundos
 
+void diagnosticoWiFi() {
+  Serial.println("\n--- ESCANEANDO REDES WIFI (2.4GHz) ---");
+  // WiFi.scanNetworks() devolverá el número de redes encontradas
+  int n = WiFi.scanNetworks();
+  if (n == 0) {
+    Serial.println("No se encontraron redes WiFi. Verifica que haya redes de 2.4GHz cerca.");
+  } else {
+    Serial.print(n);
+    Serial.println(" redes encontradas:");
+    for (int i = 0; i < n; ++i) {
+      // Imprime el nombre de la red, la potencia de señal y si tiene contraseña
+      Serial.print(i + 1);
+      Serial.print(": ");
+      Serial.print(WiFi.SSID(i));
+      Serial.print(" (");
+      Serial.print(WiFi.RSSI(i));
+      Serial.print(" dBm) ");
+      Serial.println((WiFi.encryptionType(i) == ENC_TYPE_NONE) ? "Abierta" : "Protegida");
+      delay(10);
+    }
+  }
+  Serial.println("--- FIN ESCANEO ---\n");
+}
+
 void setup() {  
   Serial.begin(115200);
   delay(1000);
   Serial.println("\n\n--- INICIANDO FIRMWARE ASISTENCIA ---");
   Serial.println("Puerto Serie OK a 115200 baudios");
+  
+  diagnosticoWiFi(); // Escanear redes antes de intentar conectar
   
   pinMode(PIN_LUZ, OUTPUT);
   digitalWrite(PIN_LUZ, HIGH); 
