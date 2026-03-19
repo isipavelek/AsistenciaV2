@@ -1,10 +1,10 @@
+#include <qrcode.h>
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <U8g2lib.h>
 #include <SPI.h>
-#include <qrcode.h>
 
 // --- CONFIGURACIÓN DE PINES ESP32 ---
 // En ESP32 se usan directamente los números de GPIO (G en la placa)

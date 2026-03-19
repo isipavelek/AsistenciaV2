@@ -1,28 +1,27 @@
-#include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
-#include <ESP8266HTTPClient.h>
+#include <qrcode.h>
+#include <WiFi.h>
+#include <WiFiMulti.h>
+#include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <U8g2lib.h>
 #include <SPI.h>
-#include <qrcode.h>
 
-// Configuración de la pantalla gráfica HX1230 (96x68)
-// Pines SPI (Software SPI 3-wire)
-#define HX1230_CLK 14
-#define HX1230_DIN 13
-#define HX1230_CS  15
-#define HX1230_RST 2
+// --- CONFIGURACIÓN DE PINES ESP32 ---
+// En ESP32 se usan directamente los números de GPIO (G en la placa)
+#define HX1230_CLK 18  // G18
+#define HX1230_DIN 23  // G23
+#define HX1230_CS  5   // G5
+#define HX1230_RST 4   // G4
+#define PIN_LUZ    15  // G15 (Backlight / BL)
 
-#define PIN_LUZ D1 
-
-// Constructor U8g2 para HX1230
+// Constructor U8g2 para HX1230 (Software SPI para flexibilidad)
 U8G2_HX1230_96X68_F_3W_SW_SPI u8g2(U8G2_R0, HX1230_CLK, HX1230_DIN, HX1230_CS, HX1230_RST);
 
 // Instancia Multi-WiFi
-ESP8266WiFiMulti wifiMulti;
+WiFiMulti wifiMulti;
 
 // Listado de redes configuradas para el diagnóstico
-const char* targetSSIDs[] = {"EST UTN", "EST-UTN2", "EST-UTN3", "EST-UTN4"};
+const char* targetSSIDs[] = {"EST UTN", "UTN-EST2", "EST-UTN3", "CASA 2.4"};
 const int numTargetNetworks = 4;
 
 // Supabase
@@ -33,10 +32,10 @@ unsigned long lastUpdate = 0;
 const long updateInterval = 10000; // 10 segundos
 
 void diagnosticoWiFi() {
-  Serial.println("\n--- ESCANEANDO REDES WIFI (2.4GHz) ---");
+  Serial.println("\n--- ESCANEANDO REDES WIFI (ESP32) ---");
   int n = WiFi.scanNetworks();
   if (n == 0) {
-    Serial.println("No se encontraron redes WiFi. Verifica que haya redes de 2.4GHz cerca.");
+    Serial.println("No se encontraron redes WiFi.");
   } else {
     Serial.print(n);
     Serial.println(" redes encontradas:");
@@ -61,7 +60,7 @@ void diagnosticoWiFi() {
       Serial.print(" (");
       Serial.print(WiFi.RSSI(i));
       Serial.print(" dBm) ");
-      Serial.println((WiFi.encryptionType(i) == ENC_TYPE_NONE) ? "Abierta" : "Protegida");
+      Serial.println(WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "Abierta" : "Protegida");
       delay(10);
     }
   }
@@ -71,27 +70,26 @@ void diagnosticoWiFi() {
 void setup() {  
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n--- INICIANDO FIRMWARE ASISTENCIA ---");
-  Serial.println("Puerto Serie OK a 115200 baudios");
+  Serial.println("\n\n--- INICIANDO FIRMWARE ASISTENCIA (ESP32) ---");
   
   diagnosticoWiFi(); // Escanear redes antes de intentar conectar
   
   pinMode(PIN_LUZ, OUTPUT);
-  digitalWrite(PIN_LUZ, HIGH); 
+  digitalWrite(PIN_LUZ, HIGH); // Encender Backlight (BL)
 
   u8g2.begin();
   u8g2.setContrast(150); 
   u8g2.setFont(u8g2_font_6x10_tf);
   
   u8g2.clearBuffer();
-  u8g2.drawStr(10, 34, "Buscando WiFi...");
+  u8g2.drawStr(5, 34, "ESP32 Conectando...");
   u8g2.sendBuffer();
 
-  // Configurar lista de redes prioritarias
+  // Configurar lista de redes prioritarias (Actualizado con tus redes)
   wifiMulti.addAP("EST UTN", "ObiWan2025");
-  wifiMulti.addAP("EST-UTN2", "Isi12345");
+  wifiMulti.addAP("UTN-EST2", "Isi12345");
   wifiMulti.addAP("EST-UTN3", "Isi12345");
-  wifiMulti.addAP("EST-UTN4", "Isi12345");
+  wifiMulti.addAP("CASA 2.4", "12345casa");
 
   Serial.println("Esperando conexión WiFi...");
   while (wifiMulti.run() != WL_CONNECTED) {
@@ -103,17 +101,16 @@ void setup() {
   Serial.println("IP: " + WiFi.localIP().toString());
   
   u8g2.clearBuffer();
-  u8g2.drawStr(25, 34, "WiFi OK!");
+  u8g2.drawStr(15, 34, "ESP32 WiFi OK!");
   u8g2.sendBuffer();
   delay(1000);
 }
 
 void loop() {
-  // Asegurar conectividad en cada ciclo
   if (wifiMulti.run() == WL_CONNECTED) {
     if (millis() - lastUpdate >= updateInterval || lastUpdate == 0) {
       lastUpdate = millis();
-      Serial.println("\n--- Intentando obtener nuevo token ---");
+      Serial.println("\n--- ESP32: Pidiendo nuevo token ---");
       
       String tokenActivo = "qr_" + String(random(10000, 99999)) + "_" + String(millis());
       
@@ -126,29 +123,23 @@ void loop() {
       http.begin(client, fullUrl);
       http.addHeader("Content-Type", "application/json");
       http.addHeader("Authorization", "Bearer " + String(supabaseKey));
-      http.addHeader("Prefer", "return=representation");
       
       String payload = "{\"token\":\"" + tokenActivo + "\"}";
       int httpResponseCode = http.POST(payload);
       
       if (httpResponseCode == 201) {
-        Serial.print("SUCCESS: QR guardado en Supabase. Code: ");
+        Serial.print("SUCCESS: QR guardado. Code: ");
         Serial.println(httpResponseCode);
         mostrarQR(tokenActivo);
       } else {
-        String responseBody = http.getString();
         Serial.print("ERROR SUPABASE Status: ");
         Serial.println(httpResponseCode);
-        Serial.println("Cuerpo de respuesta: " + responseBody);
         
         u8g2.clearBuffer();
-        u8g2.setCursor(5, 20);
-        u8g2.print("Error Supabase");
-        u8g2.setCursor(5, 40);
+        u8g2.drawStr(5, 30, "Error Supabase");
+        u8g2.setCursor(5, 50);
         u8g2.print("Status: ");
         u8g2.print(httpResponseCode);
-        u8g2.setCursor(5, 55);
-        u8g2.print("Reintentando...");
         u8g2.sendBuffer();
       }
       http.end();
@@ -156,7 +147,7 @@ void loop() {
   } else {
     Serial.println("WiFi perdido. Reconectando...");
     u8g2.clearBuffer();
-    u8g2.drawStr(10, 34, "Reconectando...");
+    u8g2.drawStr(5, 34, "Reconectando...");
     u8g2.sendBuffer();
     delay(5000);
   }
@@ -181,5 +172,5 @@ void mostrarQR(String texto) {
     }
   }
   u8g2.sendBuffer();
-  Serial.println("QR mostrado: " + texto);
+  Serial.println("QR en pantalla: " + texto);
 }
