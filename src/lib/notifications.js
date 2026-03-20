@@ -1,4 +1,27 @@
+const translations = {
+  'Invalid login credentials': 'Credenciales de inicio de sesión inválidas.',
+  'Email not confirmed': 'El correo electrónico no ha sido confirmado.',
+  'User not found': 'Usuario no encontrado.',
+  'New password should be different from the old password.': 'La nueva contraseña debe ser diferente a la anterior.',
+  'Password should be at least 6 characters': 'La contraseña debe tener por lo menos 6 caracteres.',
+  'Lock broken by another request with the \'steal\' option.': 'Conflicto de sesión (reintenta o refresca la página).',
+  'Unable to validate email': 'No se pudo validar el correo electrónico.',
+  'Failed to fetch': 'Error de conexión con el servidor.',
+  'Network error': 'Error de red.',
+  'Database error': 'Error de base de datos.',
+  'User already registered': 'El usuario ya se encuentra registrado.'
+};
+
 export function showNotification(message, type = 'info') {
+  // Translate if message starts with any key or exactly matches
+  let translatedMessage = message;
+  for (const [en, es] of Object.entries(translations)) {
+    if (message.includes(en)) {
+      translatedMessage = es;
+      break;
+    }
+  }
+
   let container = document.querySelector('.toast-container');
   if (!container) {
     container = document.createElement('div');
@@ -15,7 +38,7 @@ export function showNotification(message, type = 'info') {
 
   toast.innerHTML = `
     <i data-lucide="${icon}" style="color: var(--${type === 'info' ? 'primary-light' : type});"></i>
-    <span>${message}</span>
+    <span>${translatedMessage}</span>
   `;
 
   container.appendChild(toast);
