@@ -130,9 +130,15 @@ export async function renderABM(container) {
               <option value="Servicios Generales">Servicios Generales</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>Categoría / Cargo</label>
-            <input type="text" id="user-category" placeholder="Ej: Jefe de Preceptores">
+          <div style="display: flex; gap: 1rem;">
+            <div class="form-group" style="flex: 1;">
+              <label>Categoría / Cargo</label>
+              <input type="text" id="user-category" placeholder="Ej: Jefe de Preceptores">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label>Fecha de Antigüedad</label>
+              <input type="date" id="user-seniority">
+            </div>
           </div>
           <div style="display: flex; gap: 1rem; margin-top: 1rem;">
             <button type="submit" style="background: var(--accent-gradient);">Guardar</button>
@@ -262,6 +268,7 @@ export async function renderABM(container) {
         container.querySelector('#user-role').value = user.role;
         container.querySelector('#user-group').value = user.personnel_group || 'Administrativo';
         container.querySelector('#user-category').value = user.category || '';
+        container.querySelector('#user-seniority').value = user.seniority_date || '';
         
         container.querySelector('#modal-title').textContent = 'Editar Usuario';
         container.querySelector('#password-group').style.display = 'none';
@@ -313,6 +320,7 @@ export async function renderABM(container) {
       role: container.querySelector('#user-role').value,
       personnel_group: container.querySelector('#user-group').value,
       category: container.querySelector('#user-category').value,
+      seniority_date: container.querySelector('#user-seniority').value || null
     };
 
     try {
@@ -648,8 +656,8 @@ export async function renderAuthorizations(container) {
     }).join('');
 
     // Attach events locally
-    tbody.querySelectorAll('.approve-req').forEach(btn => btn.onclick = () => updateStatus(btn.dataset.id, 'approved'));
-    tbody.querySelectorAll('.reject-req').forEach(btn => btn.onclick = () => updateStatus(btn.dataset.id, 'rejected'));
+    tbody.querySelectorAll('.approve-req').forEach(btn => btn.onclick = () => showAuthEvaluationModal(btn.dataset.id, 'approved'));
+    tbody.querySelectorAll('.reject-req').forEach(btn => btn.onclick = () => showAuthEvaluationModal(btn.dataset.id, 'rejected'));
     tbody.querySelectorAll('.reset-req').forEach(btn => btn.onclick = () => updateStatus(btn.dataset.id, 'pending'));
     tbody.querySelectorAll('.delete-req').forEach(btn => btn.onclick = () => deleteAuth(btn.dataset.id));
     tbody.querySelectorAll('.view-attachment').forEach(btn => btn.onclick = () => {
@@ -665,17 +673,100 @@ export async function renderAuthorizations(container) {
     if (window.lucide) window.lucide.createIcons();
   }
 
-  async function updateStatus(id, newStatus) {
-    const actionLabel = newStatus === 'approved' ? 'Aprobar' : (newStatus === 'rejected' ? 'Rechazar' : 'Revertir');
-    const adminNotes = (newStatus === 'approved' || newStatus === 'rejected') ? prompt(`Comentario opcional para ${actionLabel}:`, '') : null;
-    
-    // If user cancelled prompt, it returns null. We treat it as "no comment" but proceed with status change unless we decide otherwise.
-    // In this case, we'll only cancel if we want a REASON for rejection, but user said "optional".
-    
-    const payload = { status: newStatus };
-    if (adminNotes !== null) payload.admin_notes = adminNotes;
+  async function showAuthEvaluationModal(id, newStatus) {
+    const auth = allReqs.find(r => r.id === id);
+    if (!auth) return;
 
-    const { error } = await supabase.from('authorizations').update(payload).eq('id', id);
+    const user = auth.profiles;
+    const currentYear = new Date().getFullYear();
+
+    // Fetch usage stats for this year
+    const { data: yearAuths } = await supabase
+      .from('authorizations')
+      .select('type, start_date, end_date')
+      .eq('user_id', auth.user_id)
+      .eq('status', 'approved')
+      .gte('start_date', `${currentYear}-01-01`);
+
+    let art85Count = 0;
+    let examCount = 0;
+    
+    yearAuths?.forEach(a => {
+      if (a.type.includes('Art. 85')) art85Count++;
+      if (a.type.includes('Examen')) examCount++;
+    });
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay animate-in';
+    modal.innerHTML = `
+      <div class="card glass modal-content" style="max-width: 500px; width: 90%;">
+        <h3 style="margin-bottom: 1rem; color: ${newStatus === 'approved' ? 'var(--success)' : 'var(--danger)'};">
+          ${newStatus === 'approved' ? 'Aprobar Solicitud' : 'Rechazar Solicitud'}
+        </h3>
+        
+        <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+          <p style="font-size: 0.9rem; margin-bottom: 0.5rem;"><strong>Empleado:</strong> ${user.last_name}, ${user.first_name}</p>
+          <p style="font-size: 0.9rem; margin-bottom: 0.5rem;"><strong>Licencia:</strong> ${auth.type}</p>
+          <p style="font-size: 0.85rem; color: var(--text-dim);">${safeFormatDate(auth.start_date)} ${auth.end_date ? ' al ' + safeFormatDate(auth.end_date) : ''}</p>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <h4 style="font-size: 0.8rem; text-transform: uppercase; color: var(--secondary); margin-bottom: 0.75rem;">Resumen de Uso (${currentYear})</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="glass" style="padding: 0.75rem; text-align: center; border-radius: 8px;">
+              <div style="font-size: 1.25rem; font-weight: bold; color: ${art85Count >= 5 ? 'var(--danger)' : 'white'};">${art85Count}/6</div>
+              <div style="font-size: 0.65rem; color: var(--text-dim);">Art. 85 (Particulares)</div>
+            </div>
+            <div class="glass" style="padding: 0.75rem; text-align: center; border-radius: 8px;">
+              <div style="font-size: 1.25rem; font-weight: bold;">${examCount} días</div>
+              <div style="font-size: 0.65rem; color: var(--text-dim);">Días de Examen</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Nota / Respuesta para el empleado</label>
+          <textarea id="eval-notes" placeholder="Ej: Autorizado por director de área..." style="width: 100%; min-height: 80px; background: rgba(0,0,0,0.2); color:white; border: 1px solid var(--glass-border); border-radius: 6px; padding: 0.5rem;"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+          <button id="confirm-eval" style="background: ${newStatus === 'approved' ? 'var(--success)' : 'var(--danger)'}; flex: 2; color: white;">Confirmar ${newStatus === 'approved' ? 'Aprobación' : 'Rechazo'}</button>
+          <button id="cancel-eval" style="background: var(--surface); flex: 1;">Cancelar</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector('#cancel-eval').onclick = () => modal.remove();
+    modal.querySelector('#confirm-eval').onclick = async () => {
+      const admin_notes = modal.querySelector('#eval-notes').value;
+      modal.querySelector('#confirm-eval').disabled = true;
+      modal.querySelector('#confirm-eval').textContent = 'Procesando...';
+
+      const { error } = await supabase
+        .from('authorizations')
+        .update({ 
+          status: newStatus,
+          admin_notes: admin_notes,
+          metadata: { ...auth.metadata, updated_at: new Date().toISOString() }
+        })
+        .eq('id', id);
+
+      if (error) {
+        showNotification('Error al actualizar: ' + error.message, 'error');
+        modal.querySelector('#confirm-eval').disabled = false;
+        modal.querySelector('#confirm-eval').textContent = 'Confirmar';
+      } else {
+        showNotification('Solicitud ' + (newStatus === 'approved' ? 'aprobada' : 'rechazada'), 'success');
+        modal.remove();
+        loadAuths();
+      }
+    };
+  }
+
+  async function updateStatus(id, newStatus) {
+    const { error } = await supabase.from('authorizations').update({ status: newStatus }).eq('id', id);
     if (error) showNotification(error.message, 'error');
     else {
       showNotification('Estado actualizado', 'success');

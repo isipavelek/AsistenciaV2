@@ -696,10 +696,16 @@ function renderRequestForm() {
         <div class="form-group">
           <label>Motivo / Tipo</label>
           <select id="auth-type" required>
-            <option value="Examen">Examen</option>
-            <option value="Atención Familiar">Atención Familiar</option>
-            <option value="Examen">Examen / Estudio</option>
-            <option value="Media Jornada">Media Jornada (Art. 87)</option>
+            <option value="Razones Particulares (Art. 85)">Razones Particulares (Art. 85)</option>
+            <option value="Examen (Estudio)">Examen (Estudio)</option>
+            <option value="Atención Familiar (Art. 75/76)">Atención Familiar (Art. 75/76)</option>
+            <option value="Licencia Anual (Vacaciones)">Licencia Anual (Vacaciones)</option>
+            <option value="Fallecimiento (Cónyuge/Padres/Hijos)">Fallecimiento (Cónyuge/Padres/Hijos)</option>
+            <option value="Fallecimiento (Hermanos/Nietos)">Fallecimiento (Hermanos/Nietos)</option>
+            <option value="Matrimonio">Matrimonio</option>
+            <option value="Mudanza">Mudanza</option>
+            <option value="Maternidad / Paternidad">Maternidad / Paternidad</option>
+            <option value="Media Jornada (Art. 87)">Media Jornada (Art. 87)</option>
             <option value="Salida Excepcional">Salida Excepcional (2hs max)</option>
           </select>
         </div>
@@ -747,6 +753,38 @@ function renderRequestForm() {
     if (!startDate) {
       showNotification('Por favor ingresa una fecha de inicio.', 'error');
       return;
+    }
+
+    // --- ART 85 VALIDATION ---
+    if (type === 'Razones Particulares (Art. 85)') {
+      const start = new Date(startDate);
+      const startYear = start.getFullYear();
+      const startMonth = start.getMonth(); // 0-indexed
+
+      // Get all approved/pending Art 85 requests for this user in this year
+      const { data: yearReqs } = await supabase
+        .from('authorizations')
+        .select('start_date')
+        .eq('user_id', session.user.id)
+        .eq('type', 'Razones Particulares (Art. 85)')
+        .gte('start_date', `${startYear}-01-01`)
+        .lte('start_date', `${startYear}-12-31`)
+        .neq('status', 'rejected');
+
+      if (yearReqs && yearReqs.length >= 6) {
+        showNotification('Ya has utilizado el cupo anual de 6 días para Razones Particulares.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Enviar Solicitud';
+        return;
+      }
+
+      const monthReqs = yearReqs?.filter(r => new Date(r.start_date).getMonth() === startMonth);
+      if (monthReqs && monthReqs.length >= 2) {
+        showNotification('Ya has utilizado el cupo mensual de 2 días para Razones Particulares.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Enviar Solicitud';
+        return;
+      }
     }
 
     btn.disabled = true;
