@@ -53,6 +53,7 @@ async function init() {
     
     if (event === 'PASSWORD_RECOVERY') {
       if (!isResetModalOpen) {
+        renderAuth(); // Render auth background instead of dashboard
         showResetPasswordModal();
       }
     } else if (session) {
@@ -1592,9 +1593,11 @@ function showResetPasswordModal() {
     }
   };
 
-  cancelBtn.onclick = () => {
+  cancelBtn.onclick = async () => {
     modal.remove();
     isResetModalOpen = false;
+    await supabase.auth.signOut();
+    renderAuth();
   };
 }
 
