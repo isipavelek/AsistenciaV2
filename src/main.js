@@ -32,6 +32,36 @@ window.addEventListener('beforeinstallprompt', (e) => {
   if (installBtn) installBtn.style.display = 'flex';
 });
 
+// Global Error Handling View
+function showGlobalErrorScreen(errorMsg) {
+  const appContainer = document.querySelector('#app');
+  if (appContainer) {
+    appContainer.innerHTML = `
+      <div style="padding: 2rem; color: #f87171; background: #0f172a; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-family: sans-serif;">
+        <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: #f87171; margin-bottom: 1.5rem;"></i>
+        <h1 style="font-size: 1.5rem; color: white; margin-bottom: 1rem;">Se ha producido un error técnico</h1>
+        <p style="color: #94a3b8; max-width: 400px; margin-bottom: 2rem;">${errorMsg}</p>
+        <button onclick="location.reload()" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: bold;">
+          Recargar Aplicación
+        </button>
+      </div>
+    `;
+    if (window.lucide) window.lucide.createIcons();
+  }
+}
+
+// Global Exception Handlers
+window.onerror = function(message, source, lineno, colno, error) {
+  console.error('Fatal Application Error:', {message, source, lineno, colno, error});
+  showGlobalErrorScreen(message || 'Error desconocido');
+  return true;
+};
+
+window.onunhandledrejection = function(event) {
+  console.error('Unhandled Promise Rejection:', event.reason);
+  showGlobalErrorScreen(event.reason?.message || 'Error en proceso asíncrono');
+};
+
 const app = document.querySelector('#app');
 
 // State management
@@ -40,6 +70,7 @@ let profile = null;
 let settings = null;
 let isResetModalOpen = false;
 let isGeoLoading = false;
+let isDashboardRendering = false; // Flag to prevent race conditions during init
 
 /**
  * Initialize application
@@ -49,26 +80,41 @@ async function init() {
 
   // Register auth listener immediately to catch PASSWORD_RECOVERY even if init setup fails
   supabase.auth.onAuthStateChange(async (event, newSession) => {
+    const oldSession = session;
     session = newSession;
     console.log('Auth event:', event, session ? 'Session active' : 'No session');
     
+    // Handle specific events
+    if (event === 'SIGNED_OUT') {
+      profile = null;
+      renderAuth();
+      showNotification('Has cerrado sesión.', 'info');
+      return;
+    }
+
     if (event === 'PASSWORD_RECOVERY') {
       if (!isResetModalOpen) {
-        renderAuth(); // Render auth background instead of dashboard
+        renderAuth();
         showResetPasswordModal();
       }
-    } else if (session) {
-      // Avoid fetching profile if we are in recovery state but haven't triggered the modal yet
+      return;
+    }
+
+    // Skip if we are currently rendering the dashboard to avoid race conditions
+    if (isDashboardRendering) return;
+
+    if (session) {
       if (!window.location.hash.includes('type=recovery')) {
-        await fetchProfile();
-        renderDashboard();
+        // Only run if the session is actually "new" or refresh (avoid redundant renders)
+        if (!oldSession || oldSession.access_token !== session.access_token) {
+          console.log('Session updated/new, loading dashboard...');
+          await fetchProfile();
+          await renderDashboard();
+        }
       }
     } else {
       profile = null;
       renderAuth();
-      if (event === 'SIGNED_OUT') {
-        showNotification('Has cerrado sesión.', 'info'); 
-      }
     }
   });
 
@@ -79,10 +125,20 @@ async function init() {
     // Load settings globally
     settings = await getSettings();
 
+    if (app) {
+      app.addEventListener('click', (e) => {
+        // Delegate 'back-to-dash' clicks
+        const backBtn = e.target.closest('#back-to-dash');
+        if (backBtn) {
+          renderDashboard();
+        }
+      });
+    }
+
     if (session) {
       if (!window.location.hash.includes('type=recovery')) {
         await fetchProfile();
-        renderDashboard();
+        await renderDashboard();
       }
     } else {
       renderAuth();
@@ -91,7 +147,7 @@ async function init() {
     console.error('INIT ERROR:', err);
     // Don't show hard error screen if it's a recovery attempt
     if (!window.location.hash.includes('type=recovery')) {
-      if (app) app.innerHTML = `<div style="padding:2rem; color:white;"><h1>Error de Carga</h1><p>${err.message}</p></div>`;
+      showGlobalErrorScreen(err.message);
     }
   }
 }
@@ -196,9 +252,13 @@ function renderAuth() {
 }
 
 async function renderDashboard() {
+  if (isDashboardRendering) return;
+  isDashboardRendering = true;
+
   console.log('--- RENDERING DASHBOARD ---');
   if (!app) {
     console.error('CRITICAL: #app element not found!');
+    isDashboardRendering = false;
     return;
   }
   const isAdminEmail = session?.user?.email?.toLowerCase() === 'ipavelek@gmail.com';
@@ -330,22 +390,19 @@ async function renderDashboard() {
   // Auto-check notifications
   checkNotifications();
 
-  app.addEventListener('click', (e) => {
-    if (e.target.id === 'back-to-dash') {
-      renderDashboard();
+  try {
+    initClockIn();
+    fetchStats();
+    fetchAuths();
+    if (['director', 'vicedirector', 'rrhh'].includes(profile?.role)) {
+      fetchAdminAlerts();
     }
-  });
-
-  document.querySelector('#request-auth-btn').addEventListener('click', renderRequestForm);
-  document.querySelector('#view-full-history-btn').addEventListener('click', () => renderUserAuthHistory(document.querySelector('#main-content')));
-  document.querySelector('#clock-in-qr-btn').addEventListener('click', openQRScannerModal);
-  
-  initClockIn();
-  fetchStats();
-  fetchAuths();
-  if (['director', 'vicedirector', 'rrhh'].includes(profile?.role)) {
-    fetchAdminAlerts();
+  } catch (err) {
+    console.error('Error post-render:', err);
+  } finally {
+    isDashboardRendering = false;
   }
+  
   if (window.lucide) window.lucide.createIcons();
 }
 
