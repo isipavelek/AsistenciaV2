@@ -68,28 +68,50 @@ export function showNotification(message, type = 'info') {
 }
 
 /**
- * Requests permission for browser push notifications
+ * Database Notifications
  */
-export async function requestNotificationPermission() {
-  if (!("Notification" in window)) {
-    console.warn("Este navegador no soporta notificaciones de escritorio.");
+export async function createNotification(supabase, userId, message, type = 'info') {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .insert([{ user_id: userId, message, type }]);
+    
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Error creating notification:', err);
     return false;
   }
-  
-  if (Notification.permission === "granted") return true;
-  
-  const permission = await Notification.requestPermission();
-  return permission === "granted";
 }
 
-/**
- * Sends a browser push notification
- */
-export function sendBrowserNotification(title, body) {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  
-  new Notification(title, {
-    body: body,
-    icon: '/vite.svg'
-  });
+export async function fetchUnreadNotifications(supabase, userId) {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_read', false)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('Error fetching notifications:', err);
+    return [];
+  }
+}
+
+export async function markNotificationsAsRead(supabase, notificationIds) {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .in('id', notificationIds);
+    
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Error marking notifications as read:', err);
+    return false;
+  }
 }

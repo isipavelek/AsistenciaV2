@@ -368,16 +368,24 @@ export async function renderAdvancedReports(container) {
       btn.innerHTML = '<i class="animate-spin" data-lucide="loader-2" style="width: 14px;"></i>';
       if (window.lucide) window.lucide.createIcons();
 
-      const { error } = await supabase.from('attendance').delete().eq('id', id);
+      const { error, count } = await supabase.from('attendance').delete({ count: 'exact' }).eq('id', id);
       
+      console.log('Delete attempt:', { id, error, count });
+
       if (error) {
         showNotification('Error al eliminar: ' + error.message, 'error');
         btn.disabled = false;
         btn.innerHTML = originalContent;
         if (window.lucide) window.lucide.createIcons();
+      } else if (count === 0) {
+        showNotification('No se pudo eliminar: el registro no existe o no tienes permisos.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+        if (window.lucide) window.lucide.createIcons();
       } else {
         showNotification('Registro eliminado correctamente', 'warning');
-        loadData();
+        // Give a small delay for DB consistency before reload
+        setTimeout(() => loadData(), 200);
       }
     } catch (err) {
       console.error('Delete error:', err);

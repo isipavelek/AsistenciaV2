@@ -1,5 +1,5 @@
 import { supabase, supabaseAdmin } from '../lib/supabase.js';
-import { showNotification } from '../lib/notifications.js';
+import { showNotification, createNotification } from '../lib/notifications.js';
 import { renderUserSchedules } from './schedules.js';
 import { logAction, getAuditLogs } from '../lib/logger.js';
 
@@ -758,6 +758,9 @@ export async function renderAuthorizations(container) {
         modal.querySelector('#confirm-eval').disabled = false;
         modal.querySelector('#confirm-eval').textContent = 'Confirmar';
       } else {
+        const msg = `Tu pedido de ${auth.type} fue ${newStatus === 'approved' ? 'aprobado' : 'rechazado'}.${admin_notes ? ' Motivo: ' + admin_notes : ''}`;
+        await createNotification(supabase, auth.user_id, msg, newStatus === 'approved' ? 'success' : 'error');
+        
         showNotification('Solicitud ' + (newStatus === 'approved' ? 'aprobada' : 'rechazada'), 'success');
         modal.remove();
         loadAuths();
