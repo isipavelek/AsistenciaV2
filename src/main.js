@@ -489,30 +489,112 @@ async function fetchAdminAlerts() {
   const missingIds = Array.from(expectedIds).filter(id => !attendingIds.has(id) && !authorizedIds.has(id));
   const missingProfiles = profiles?.filter(p => missingIds.includes(p.id)) || [];
   
+  // 4. Advanced Alerts: Tardiness, missing checkouts, license limits
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+  
+  // 4a. Excessive Tardiness (>3 in last 30 days)
+  const { data: recentLates } = await supabase.from('attendance')
+    .select('user_id')
+    .eq('status', 'late')
+    .gte('check_in', oneMonthAgo.toISOString());
+    
+  const lateCounts = {};
+  recentLates?.forEach(l => lateCounts[l.user_id] = (lateCounts[l.user_id] || 0) + 1);
+  const excessiveLateUserIds = Object.keys(lateCounts).filter(id => lateCounts[id] >= 3);
+  const excessiveLateProfiles = profiles?.filter(p => excessiveLateUserIds.includes(p.id)) || [];
+
+  // 4b. Missing Check-outs (yesterday and before)
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const { data: missingOuts } = await supabase.from('attendance')
+    .select('user_id, check_in')
+    .is('check_out', null)
+    .lt('check_in', `${today}T00:00:00.000Z`)
+    .order('check_in', { ascending: false });
+
+  // 4c. Articlo 85 Limits (using 2024 as current year for calc or dynamic)
+  const currentYear = new Date().getFullYear();
+  const { data: art85Auths } = await supabase.from('authorizations')
+    .select('user_id')
+    .eq('status', 'approved')
+    .eq('type', 'Razones Particulares (Art. 85)')
+    .gte('start_date', `${currentYear}-01-01`);
+  
+  const art85Counts = {};
+  art85Auths?.forEach(a => art85Counts[a.user_id] = (art85Counts[a.user_id] || 0) + 1);
+  const nearLimitArt85UserIds = Object.keys(art85Counts).filter(id => art85Counts[id] >= 5);
+  const nearLimitArt85Profiles = profiles?.filter(p => nearLimitArt85UserIds.includes(p.id)) || [];
+
+  let alertsHtml = '';
+  
+  // 1. Missing Todays
   if (missingProfiles.length > 0) {
-    container.innerHTML = `
-      <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); padding: 1rem; border-radius: 8px; margin-bottom: 2rem;">
-        <h4 style="color: var(--danger); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-          <i data-lucide="alert-triangle"></i> Ausencias Críticas Hoy (${missingProfiles.length})
+    alertsHtml += `
+      <div class="card glass alert-card" style="border-left: 4px solid var(--danger); margin-bottom: 1rem;">
+        <h4 style="color: var(--danger); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+          <i data-lucide="alert-circle"></i> Ausencias Críticas Hoy (${missingProfiles.length})
         </h4>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Personal que debería haber fichado hoy y no lo hizo:</p>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem;">
-          ${missingProfiles.map(p => `
-            <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-weight: 500; font-size: 0.85rem;">${p.last_name}, ${p.first_name}</span>
-              <i data-lucide="user-minus" style="width: 14px; color: var(--danger);"></i>
-            </div>
-          `).join('')}
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+          ${missingProfiles.map(p => `<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">${p.last_name}</span>`).join('')}
         </div>
       </div>
     `;
-  } else {
+  }
+
+  // 2. Missing Check-outs
+  if (missingOuts?.length > 0) {
+    const uniqueMissingOutIds = new Set(missingOuts.map(m => m.user_id));
+    const missingOutProfiles = profiles?.filter(p => uniqueMissingOutIds.has(p.id)) || [];
+    alertsHtml += `
+      <div class="card glass alert-card" style="border-left: 4px solid var(--warning); margin-bottom: 1rem;">
+        <h4 style="color: var(--warning); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+          <i data-lucide="clock"></i> Olvidos de Salida (${missingOutProfiles.length})
+        </h4>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+          ${missingOutProfiles.map(p => `<span class="badge" style="background: rgba(245, 158, 11, 0.1); color: var(--warning);">${p.last_name}</span>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // 3. Excessive Tardiness
+  if (excessiveLateProfiles.length > 0) {
+    alertsHtml += `
+      <div class="card glass alert-card" style="border-left: 4px solid var(--primary-light); margin-bottom: 1rem;">
+        <h4 style="color: var(--primary-light); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+          <i data-lucide="timer"></i> Reincidencia en Tardanzas (${excessiveLateProfiles.length})
+        </h4>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+          ${excessiveLateProfiles.map(p => `<span class="badge" style="background: rgba(94, 211, 243, 0.1); color: var(--primary-light);">${p.last_name} (${lateCounts[p.id]})</span>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // 4. License Limits
+  if (nearLimitArt85Profiles.length > 0) {
+    alertsHtml += `
+      <div class="card glass alert-card" style="border-left: 4px solid var(--secondary); margin-bottom: 1rem;">
+        <h4 style="color: var(--secondary); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+          <i data-lucide="shield-alert"></i> Próximos a Límite Art. 85 (${nearLimitArt85Profiles.length})
+        </h4>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+          ${nearLimitArt85Profiles.map(p => `<span class="badge" style="background: rgba(167, 139, 250, 0.1); color: var(--secondary);">${p.last_name} (${art85Counts[p.id]}/6)</span>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  if (alertsHtml === '') {
     container.innerHTML = `
       <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid var(--success); padding: 1rem; border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; color: #4ade80; margin-bottom: 2rem;">
         <i data-lucide="check-circle" style="width: 20px;"></i>
-        <span>No hay ausencias críticas hoy. Todos los esperados están presentes o autorizados.</span>
+        <span>No hay alertas RRHH pendientes.</span>
       </div>
     `;
+  } else {
+    container.innerHTML = `<div style="margin-bottom: 2rem;">${alertsHtml}</div>`;
   }
   if (window.lucide) window.lucide.createIcons();
 }
@@ -724,7 +806,7 @@ function renderRequestForm() {
         </div>
         <div class="form-group">
           <label>Adjuntar Certificado (Opcional)</label>
-          <input type="file" id="auth-attachment" accept=".pdf,.jpg,.png,.jpeg" style="padding: 0.5rem; background: rgba(255,255,255,0.05);">
+          <input type="file" id="auth-attachment" accept="image/*,.pdf" capture="environment" style="padding: 0.5rem; background: rgba(255,255,255,0.05);">
           <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem;">Formato admitido: PDF, JPG, PNG (Max 5MB)</p>
         </div>
         <div id="upload-status" style="display: none; font-size: 0.8rem; color: var(--secondary); margin-bottom: 1rem;">

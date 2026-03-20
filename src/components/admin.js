@@ -833,108 +833,128 @@ export async function renderAuthorizations(container) {
  * Renders the Reports and Statistics view
  */
 export async function renderReports(container) {
-  const { data: attendance, error } = await supabase
-    .from('attendance')
-    .select('*, profiles(first_name, last_name, legajo_utn)')
-    .order('check_in', { ascending: false });
+  let selectedDate = new Date().toISOString().split('T')[0];
 
-  if (error) {
-    container.innerHTML = `<p style="color: var(--danger)">Error: ${error.message}</p>`;
-    return;
-  }
+  async function loadReportData() {
+    const { data: attendance, error } = await supabase
+      .from('attendance')
+      .select('*, profiles(first_name, last_name, legajo_utn)')
+      .gte('check_in', `${selectedDate}T00:00:00.000Z`)
+      .lte('check_in', `${selectedDate}T23:59:59.999Z`)
+      .order('check_in', { ascending: true });
 
-  container.innerHTML = `
-    <div class="animate-in">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h2>Reportes de Asistencia</h2>
-        <div style="display: flex; gap: 0.5rem;">
-          <button id="download-csv" style="width: auto; padding: 0.5rem 1rem; background: var(--surface);">CSV</button>
-          <button id="download-excel" style="width: auto; padding: 0.5rem 1rem; background: var(--success); color: white;">Excel (.xlsx)</button>
+    if (error) {
+      container.innerHTML = `<p style="color: var(--danger)">Error: ${error.message}</p>`;
+      return;
+    }
+
+    const allValidated = attendance.length > 0 && attendance.every(a => a.is_validated);
+
+    container.innerHTML = `
+      <div class="animate-in">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <h2>Reportes de Asistencia</h2>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="date" id="report-date-filter" value="${selectedDate}" style="padding: 0.5rem; background: var(--surface); color: white; border: 1px solid var(--glass-border); border-radius: 8px;">
+            <button id="download-excel" style="width: auto; padding: 0.5rem 1rem; background: var(--success); color: white;">Excel</button>
+          </div>
+        </div>
+
+        <div class="glass" style="overflow-x: auto; margin-bottom: 1.5rem;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--glass-border);">
+                <th style="padding: 1rem;">Personal</th>
+                <th style="padding: 1rem;">Entrada</th>
+                <th style="padding: 1rem;">Salida</th>
+                <th style="padding: 1rem;">Estado</th>
+                <th style="padding: 1rem;">Validación</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${attendance.length === 0 ? '<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">No hay registros para esta fecha.</td></tr>' : 
+                attendance.map(a => `
+                <tr style="border-bottom: 1px solid var(--glass-border); ${a.is_validated ? 'opacity: 0.8;' : ''}">
+                  <td style="padding: 1rem;">
+                    <div style="font-weight: 500;">${a.profiles?.last_name || 'N/A'}, ${a.profiles?.first_name || 'N/A'}</div>
+                    <div style="font-size: 0.7rem; color: var(--text-dim);">L: ${a.profiles?.legajo_utn || '---'}</div>
+                  </td>
+                  <td style="padding: 1rem;">${a.check_in ? new Date(a.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}</td>
+                  <td style="padding: 1rem;">${a.check_out ? new Date(a.check_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}</td>
+                  <td style="padding: 1rem;">
+                    <span class="badge badge-${a.status}">${a.status === 'present' ? 'Presente' : (a.status === 'late' ? 'Tardanza' : (a.status === 'justified' ? 'Justificado' : 'Ausente'))}</span>
+                  </td>
+                  <td style="padding: 1rem;">
+                    ${a.is_validated ? 
+                      '<span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #4ade80;"><i data-lucide="check-check" style="width:12px;"></i> Validado</span>' : 
+                      '<span class="badge" style="background: rgba(255, 255, 255, 0.05); color: var(--text-dim);">Pendiente</span>'
+                    }
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <button id="back-to-dash" style="width: auto; background: var(--surface);">Volver</button>
+          ${attendance.length > 0 && !allValidated ? `
+            <button id="validate-day-btn" style="width: auto; background: var(--accent-gradient); padding: 0.75rem 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="shield-check"></i> Validar y Firmar Jornada
+            </button>
+          ` : (allValidated ? '<div style="color: var(--success); font-weight: 500;"><i data-lucide="award"></i> Esta jornada ya ha sido validada por el Director.</div>' : '')}
         </div>
       </div>
-      <div class="glass" style="overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse; text-align: left;">
-          <thead>
-            <tr style="border-bottom: 1px solid var(--glass-border);">
-              <th style="padding: 1rem;">Fecha</th>
-              <th style="padding: 1rem;">Personal</th>
-              <th style="padding: 1rem;">Entrada</th>
-              <th style="padding: 1rem;">Salida</th>
-              <th style="padding: 1rem;">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${attendance.map(a => `
-              <tr style="border-bottom: 1px solid var(--glass-border);">
-                <td style="padding: 1rem;">${a.check_in ? new Date(a.check_in).toLocaleDateString() : '---'}</td>
-                <td style="padding: 1rem;">${a.profiles?.last_name || 'N/A'}, ${a.profiles?.first_name || 'N/A'}</td>
-                <td style="padding: 1rem;">${a.check_in ? new Date(a.check_in).toLocaleTimeString() : '--:--'}</td>
-                <td style="padding: 1rem;">${a.check_out ? new Date(a.check_out).toLocaleTimeString() : '--:--'}</td>
-                <td style="padding: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                  <span class="badge badge-${a.status}">${a.status === 'present' ? 'Presente' : (a.status === 'late' ? 'Tardanza' : (a.status === 'justified' ? 'Justificado' : 'Ausente'))}</span>
-                  ${a.status === 'late' && !a.is_compensated ? `
-                    <button class="compensate-btn" data-id="${a.id}" style="width: auto; padding: 0.15rem 0.4rem; font-size: 0.7rem; background: var(--secondary);">Compensar</button>
-                  ` : (a.is_compensated ? '<span class="badge" style="background: var(--success); font-size: 0.6rem;">Compensado</span>' : '')}
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-      <button id="back-to-dash" style="margin-top: 2rem; background: var(--surface);">Volver al Dashboard</button>
-    </div>
-  `;
+    `;
 
-  document.querySelector('#download-csv').onclick = () => {
-    const csv = [
-      ['Fecha', 'Legajo', 'Nombre', 'Entrada', 'Salida', 'Estado'].join(','),
-      ...attendance.map(a => [
-        new Date(a.check_in).toLocaleDateString(),
-        a.profiles.legajo_utn,
-        `"${a.profiles.last_name} ${a.profiles.first_name}"`,
-        new Date(a.check_in).toLocaleTimeString(),
-        a.check_out ? new Date(a.check_out).toLocaleTimeString() : '',
-        a.status
-      ].join(','))
-    ].join('\n');
+    // Listeners
+    container.querySelector('#report-date-filter').onchange = (e) => {
+      selectedDate = e.target.value;
+      loadReportData();
+    };
 
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `asistencia_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-  };
+    if (container.querySelector('#validate-day-btn')) {
+      container.querySelector('#validate-day-btn').onclick = async () => {
+        if (!confirm(`¿Estás seguro de validar todos los registros del día ${new Date(selectedDate).toLocaleDateString()}?`)) return;
+        
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error: valError } = await supabase
+          .from('attendance')
+          .update({ 
+            is_validated: true, 
+            validated_by: user.id,
+            validated_at: new Date().toISOString()
+          })
+          .gte('check_in', `${selectedDate}T00:00:00.000Z`)
+          .lte('check_in', `${selectedDate}T23:59:59.999Z`);
 
-  document.querySelector('#download-excel').onclick = () => {
-    const data = attendance.map(a => ({
-      Fecha: a.check_in ? new Date(a.check_in).toLocaleDateString() : '---',
-      Legajo: a.profiles?.legajo_utn || '---',
-      Nombre: `${a.profiles?.last_name || ''}, ${a.profiles?.first_name || ''}`,
-      Entrada: a.check_in ? new Date(a.check_in).toLocaleTimeString() : '--:--',
-      Salida: a.check_out ? new Date(a.check_out).toLocaleTimeString() : '--:--',
-      Estado: a.status.toUpperCase(),
-      Compensado: a.is_compensated ? 'SÍ' : 'NO'
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Asistencia");
-    XLSX.writeFile(wb, `Reporte_Asistencia_${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
-  container.onclick = async (e) => {
-    if (e.target.classList.contains('compensate-btn')) {
-      const { error: upError } = await supabase
-        .from('attendance')
-        .update({ is_compensated: true, status: 'present' })
-        .eq('id', e.target.dataset.id);
-      if (upError) alert(upError.message);
-      else renderReports(container);
+        if (valError) showNotification(valError.message, 'error');
+        else {
+          showNotification('Jornada validada correctamente', 'success');
+          loadReportData();
+        }
+      };
     }
-  };
 
-  if (window.lucide) window.lucide.createIcons();
+    container.querySelector('#download-excel').onclick = () => {
+        // ... (Excel logic remains similar but simplified for current view)
+        const data = attendance.map(a => ({
+          Personal: `${a.profiles?.last_name}, ${a.profiles?.first_name}`,
+          Entrada: a.check_in ? new Date(a.check_in).toLocaleTimeString() : '',
+          Salida: a.check_out ? new Date(a.check_out).toLocaleTimeString() : '',
+          Estado: a.status,
+          Validado: a.is_validated ? 'SÍ' : 'NO'
+        }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Reporte");
+        XLSX.writeFile(wb, `Reporte_${selectedDate}.xlsx`);
+    };
+
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  loadReportData();
 }
 
 /**
