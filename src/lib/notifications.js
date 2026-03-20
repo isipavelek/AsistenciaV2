@@ -29,6 +29,12 @@ export function showNotification(message, type = 'info') {
     document.body.appendChild(container);
   }
 
+  // Prevent duplicate messages being shown simultaneously
+  const existingToasts = Array.from(container.querySelectorAll('.toast span'));
+  if (existingToasts.some(t => t.textContent === translatedMessage)) {
+    return;
+  }
+
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
   

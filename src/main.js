@@ -39,6 +39,7 @@ let session = null;
 let profile = null;
 let settings = null;
 let isResetModalOpen = false;
+let isGeoLoading = false;
 
 /**
  * Initialize application
@@ -975,6 +976,9 @@ function renderAdminSection() {
 }
 
 async function initClockIn() {
+  if (isGeoLoading) return;
+  isGeoLoading = true;
+
   const btn = document.querySelector('#clock-in-btn');
   const statusText = document.querySelector('#clock-in-status');
   
@@ -1015,11 +1019,13 @@ async function initClockIn() {
         btn.onclick = () => handleClockIn(pos);
       }
       btn.disabled = false;
+      isGeoLoading = false;
     } else {
       statusText.textContent = `🚫 Estás a ${Math.round(distance)}m. Debes estar en las inmediaciones para fichar.`;
       statusText.style.color = 'var(--danger)';
       btn.textContent = 'Fuera de Rango';
       btn.disabled = true;
+      isGeoLoading = false;
       showNotification('Estás fuera del rango permitido para marcar asistencia.', 'error');
     }
   } catch (err) {
@@ -1057,6 +1063,7 @@ async function initClockIn() {
     }
     showNotification(msg, 'error');
     if (window.lucide) window.lucide.createIcons();
+    isGeoLoading = false;
   }
 }
 
