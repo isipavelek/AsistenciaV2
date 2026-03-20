@@ -359,12 +359,32 @@ export async function renderAdvancedReports(container) {
   }
 
   async function deleteRecord(id) {
+    const btn = container.querySelector(`.delete-btn[data-id="${id}"]`);
     if (!confirm('¿Estás seguro de eliminar este registro de fichaje? Esta acción no se puede deshacer.')) return;
-    const { error } = await supabase.from('attendance').delete().eq('id', id);
-    if (error) showNotification(error.message, 'error');
-    else {
-      showNotification('Registro eliminado', 'warning');
-      loadData();
+    
+    const originalContent = btn.innerHTML;
+    try {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="animate-spin" data-lucide="loader-2" style="width: 14px;"></i>';
+      if (window.lucide) window.lucide.createIcons();
+
+      const { error } = await supabase.from('attendance').delete().eq('id', id);
+      
+      if (error) {
+        showNotification('Error al eliminar: ' + error.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+        if (window.lucide) window.lucide.createIcons();
+      } else {
+        showNotification('Registro eliminado correctamente', 'warning');
+        loadData();
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+      showNotification('Error inesperado al eliminar el registro', 'error');
+      btn.disabled = false;
+      btn.innerHTML = originalContent;
+      if (window.lucide) window.lucide.createIcons();
     }
   }
 
