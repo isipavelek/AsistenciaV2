@@ -71,6 +71,7 @@ let settings = null;
 let isResetModalOpen = false;
 let isGeoLoading = false;
 let isDashboardRendering = false; // Flag to prevent race conditions during init
+let isAppInitialized = false;
 
 /**
  * Initialize application
@@ -78,7 +79,21 @@ let isDashboardRendering = false; // Flag to prevent race conditions during init
 async function init() {
   console.log('--- APP INIT START ---');
 
-  // Register auth listener immediately to catch PASSWORD_RECOVERY even if init setup fails
+  // Load settings globally once early to prevent blocking or racing
+  getSettings().then(res => { settings = res; }).catch(e => console.error('Settings load err:', e));
+
+  if (app && !window.__app_click_registered) {
+    window.__app_click_registered = true;
+    app.addEventListener('click', (e) => {
+      // Delegate 'back-to-dash' clicks
+      const backBtn = e.target.closest('#back-to-dash');
+      if (backBtn) {
+        renderDashboard();
+      }
+    });
+  }
+
+  // Register auth listener immediately
   supabase.auth.onAuthStateChange(async (event, newSession) => {
     const oldSession = session;
     session = newSession;
@@ -100,48 +115,47 @@ async function init() {
       return;
     }
 
-    // Skip if we are currently rendering the dashboard to avoid race conditions
-    if (isDashboardRendering) return;
-
+    // Give priority to INITIAL_SESSION or SIGNED_IN
     if (session) {
       if (!window.location.hash.includes('type=recovery')) {
-        // Only run if the session is actually "new" or refresh (avoid redundant renders)
-        if (!oldSession || oldSession.access_token !== session.access_token) {
+        // Only run if the session is actually "new" or we haven't initialized
+        if (!isAppInitialized || !oldSession || oldSession.access_token !== session.access_token) {
+          isAppInitialized = true;
           console.log('Session updated/new, loading dashboard...');
-          await fetchProfile();
-          await renderDashboard();
+          try {
+            settings = await getSettings(); // ensure we have settings safely
+            await fetchProfile();
+            await renderDashboard();
+          } catch (err) {
+            console.error('Error during auth status change render:', err);
+            showGlobalErrorScreen(err.message);
+          }
         }
       }
     } else {
+      isAppInitialized = true;
       profile = null;
       renderAuth();
     }
   });
 
   try {
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    session = currentSession;
-
-    // Load settings globally
-    settings = await getSettings();
-
-    if (app) {
-      app.addEventListener('click', (e) => {
-        // Delegate 'back-to-dash' clicks
-        const backBtn = e.target.closest('#back-to-dash');
-        if (backBtn) {
-          renderDashboard();
+    const { data: { session: currentSession }, error: sessErr } = await supabase.auth.getSession();
+    if (sessErr) throw sessErr;
+    
+    // If the onAuthStateChange listener hasn't handled it yet, do it here
+    if (!isAppInitialized) {
+      session = currentSession;
+      isAppInitialized = true;
+      if (session) {
+        if (!window.location.hash.includes('type=recovery')) {
+          settings = await getSettings();
+          await fetchProfile();
+          await renderDashboard();
         }
-      });
-    }
-
-    if (session) {
-      if (!window.location.hash.includes('type=recovery')) {
-        await fetchProfile();
-        await renderDashboard();
+      } else {
+        renderAuth();
       }
-    } else {
-      renderAuth();
     }
   } catch (err) {
     console.error('INIT ERROR:', err);
