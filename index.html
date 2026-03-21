@@ -18,10 +18,10 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
       // Force SW unregister for PWA fix (v6)
-      if (typeof navigator !== 'undefined' && navigator.serviceWorker && !localStorage.getItem('pwa_sw_reset_v4')) {
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker && !localStorage.getItem('pwa_sw_reset_v6')) {
         navigator.serviceWorker.getRegistrations().then(regs => {
           for (let reg of regs) reg.unregister();
-          localStorage.setItem('pwa_sw_reset_v4', 'true');
+          localStorage.setItem('pwa_sw_reset_v6', 'true');
           console.log('--- SW RESET TRIGGERED ---');
           location.reload();
         });
