@@ -18,6 +18,11 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: false,
     autoRefreshToken: false,
     detectSessionInUrl: false,
-    storage: null // Ensure it doesn't touch localStorage
+    storageKey: 'sb-admin-dummy-key',
+    storage: {
+      getItem: () => null,
+      setItem: () => null,
+      removeItem: () => null
+    }
   }
 });
