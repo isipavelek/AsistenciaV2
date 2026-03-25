@@ -79,9 +79,6 @@ let isAppInitialized = false;
 async function init() {
   console.log('--- APP INIT START ---');
 
-  // Load settings globally once early to prevent blocking or racing
-  getSettings().then(res => { settings = res; }).catch(e => console.error('Settings load err:', e));
-
   if (app && !window.__app_click_registered) {
     window.__app_click_registered = true;
     app.addEventListener('click', (e) => {
@@ -123,8 +120,12 @@ async function init() {
           isAppInitialized = true;
           console.log('Session updated/new, loading dashboard...');
           try {
+            console.log('DEBUG: Awaiting getSettings()...');
             settings = await getSettings(); // ensure we have settings safely
+            console.log('DEBUG: getSettings() resolved.', settings);
+            console.log('DEBUG: Awaiting fetchProfile()...');
             await fetchProfile();
+            console.log('DEBUG: fetchProfile() resolved.');
             await renderDashboard();
           } catch (err) {
             console.error('Error during auth status change render:', err);
@@ -149,8 +150,11 @@ async function init() {
       isAppInitialized = true;
       if (session) {
         if (!window.location.hash.includes('type=recovery')) {
+          console.log('DEBUG: init() Awaiting getSettings()...');
           settings = await getSettings();
+          console.log('DEBUG: init() Awaiting fetchProfile()...');
           await fetchProfile();
+          console.log('DEBUG: init() Awaiting renderDashboard()...');
           await renderDashboard();
         }
       } else {

@@ -11,44 +11,25 @@ const ASSETS = [
 
 // Instala el service worker y guarda en caché los recursos estáticos estables
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS).catch(err => {
-        console.warn('Algunos activos no pudieron ser cacheados:', err);
-      });
-    })
-  );
+  self.skipWaiting();
 });
 
-// Limpia cachés antiguos
+// Limpia cachés antiguos agresivamente
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
+        // Borrar absolutamente todos los caches para evitar que la página se cuelgue con la versión vieja
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.map((key) => caches.delete(key))
       );
+    }).then(() => {
+      self.clients.claim();
     })
   );
 });
 
-// Estrategia: Network First con auto-cache para archivos estáticos
+// Bypass para evitar el hang infinito de la estrategia anterior
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
-
-  e.respondWith(
-    fetch(e.request)
-      .then((response) => {
-        // Clonamos la respuesta para guardarla en caché si es válida
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(e.request, responseToCache);
-          });
-        }
-        return response;
-      })
-      .catch(() => {
-        return caches.match(e.request);
-      })
-  );
+  // Dejar que el navegador maneje todas las peticiones de red
+  return;
 });
