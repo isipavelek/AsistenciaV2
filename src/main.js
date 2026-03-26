@@ -112,20 +112,13 @@ async function init() {
       return;
     }
 
-    // Give priority to INITIAL_SESSION or SIGNED_IN
     if (session) {
-      if (!window.location.hash.includes('type=recovery')) {
-        // Only run if the session is actually "new" or we haven't initialized
-        if (!isAppInitialized || !oldSession || oldSession.access_token !== session.access_token) {
-          isAppInitialized = true;
-          console.log('Session updated/new, loading dashboard...');
+      if (isAppInitialized && event === 'SIGNED_IN') {
+        if (!window.location.hash.includes('type=recovery')) {
+          console.log('Usuario inició sesión, cargando dashboard...');
           try {
-            console.log('DEBUG: Awaiting getSettings()...');
-            settings = await getSettings(); // ensure we have settings safely
-            console.log('DEBUG: getSettings() resolved.', settings);
-            console.log('DEBUG: Awaiting fetchProfile()...');
+            settings = await getSettings();
             await fetchProfile();
-            console.log('DEBUG: fetchProfile() resolved.');
             await renderDashboard();
           } catch (err) {
             console.error('Error during auth status change render:', err);
@@ -134,9 +127,10 @@ async function init() {
         }
       }
     } else {
-      isAppInitialized = true;
-      profile = null;
-      renderAuth();
+      if (isAppInitialized) {
+        profile = null;
+        renderAuth();
+      }
     }
   });
 
