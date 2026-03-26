@@ -360,6 +360,15 @@ async function renderDashboard() {
   document.querySelector('#profile-btn').addEventListener('click', () => renderProfile(document.querySelector('#main-content'), profile));
   document.querySelector('#view-stats-btn').addEventListener('click', () => renderUserStats(document.querySelector('#main-content'), session.user.id));
   
+  document.querySelector('#view-full-history-btn')?.addEventListener('click', () => {
+    const mainContent = document.querySelector('#main-content');
+    if (mainContent) renderUserAuthHistory(mainContent);
+  });
+  
+  document.querySelector('#request-auth-btn')?.addEventListener('click', () => {
+    renderRequestForm();
+  });
+  
   const installBtn = document.querySelector('#install-pwa-btn');
   if (installBtn && deferredPrompt) {
     installBtn.style.display = 'flex';
