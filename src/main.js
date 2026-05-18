@@ -13,6 +13,7 @@ import { getSettings, resolveStandardHours } from './lib/settings.js';
 import { showNotification } from './lib/notifications.js'; 
 import { downloadICS } from './lib/calendar.js';
 import { Html5Qrcode } from 'html5-qrcode';
+import { getUserStats } from './lib/stats_engine.js';
 
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
@@ -135,7 +136,16 @@ async function init() {
   });
 
   try {
-    const { data: { session: currentSession }, error: sessErr } = await supabase.auth.getSession();
+    console.log('DEBUG: Awaiting getSession()...');
+    const sessionPromise = supabase.auth.getSession();
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout fetching session from Supabase')), 5000)
+    );
+    
+    // Use Promise.race to prevent infinite hang if getSession locks up
+    const { data: { session: currentSession }, error: sessErr } = await Promise.race([sessionPromise, timeoutPromise]);
+    console.log('DEBUG: getSession() resolved.');
+
     if (sessErr) throw sessErr;
     
     // If the onAuthStateChange listener hasn't handled it yet, do it here
@@ -152,6 +162,7 @@ async function init() {
           await renderDashboard();
         }
       } else {
+        console.log('DEBUG: No session, rendering Auth...');
         renderAuth();
       }
     }
@@ -159,7 +170,7 @@ async function init() {
     console.error('INIT ERROR:', err);
     // Don't show hard error screen if it's a recovery attempt
     if (!window.location.hash.includes('type=recovery')) {
-      showGlobalErrorScreen(err.message);
+      showGlobalErrorScreen(err.message || 'Error de conexión con el servidor (Supabase)');
     }
   }
 }
@@ -342,6 +353,9 @@ async function renderDashboard() {
             <p style="color: var(--text-muted); font-size: 0.875rem;">Cargando...</p>
           </div>
           <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <button id="view-my-rights-btn" style="background: var(--accent-gradient); border: none; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; color: white;">
+              <i data-lucide="award" style="width: 18px;"></i> Mi Resumen de Derechos y Licencias
+            </button>
             <button id="view-full-history-btn" style="background: var(--surface); border: 1px solid var(--glass-border); width: 100%; font-size: 0.8rem; padding: 0.5rem;">
               Ver Historial Detallado
             </button>
@@ -356,13 +370,82 @@ async function renderDashboard() {
     </div>
   `;
 
+  const navigateTo = (renderFn, ...args) => {
+    const mainContent = document.querySelector('#main-content');
+    if (mainContent) {
+      mainContent.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; color: var(--text-muted); width: 100%; text-align: center; padding: 2rem;">
+          <div class="loading-spinner" style="width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--secondary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem;"></div>
+          <p style="font-size: 0.875rem; font-weight: 300; font-family: var(--font-main);">Cargando sección...</p>
+          <div id="nav-slow-msg" style="display: none; flex-direction: column; align-items: center; gap: 0.75rem; margin-top: 1rem; padding: 1rem; border-radius: 8px; border: 1px dashed var(--warning); background: rgba(245, 158, 11, 0.05); max-width: 380px;">
+            <p style="color: var(--warning); font-size: 0.8rem; line-height: 1.4;">La base de datos de Supabase está tardando en responder. Esto puede suceder si el servidor gratuito estaba inactivo o hay lentitud en la red.</p>
+            <button id="force-retry-btn" class="btn-primary" style="width: auto; padding: 0.5rem 1rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.25rem;">
+              <i data-lucide="refresh-cw" style="width: 12px; height: 12px;"></i> Reintentar ahora
+            </button>
+          </div>
+        </div>
+      `;
+      if (window.lucide) window.lucide.createIcons();
+    }
+
+    let isFinished = false;
+    const slowTimer = setTimeout(() => {
+      if (!isFinished && mainContent) {
+        const slowMsg = mainContent.querySelector('#nav-slow-msg');
+        if (slowMsg) {
+          slowMsg.style.display = 'flex';
+          if (window.lucide) window.lucide.createIcons();
+          const forceBtn = slowMsg.querySelector('#force-retry-btn');
+          if (forceBtn) {
+            forceBtn.onclick = () => {
+              clearTimeout(slowTimer);
+              navigateTo(renderFn, ...args);
+            };
+          }
+        }
+      }
+    }, 4500);
+
+    setTimeout(async () => {
+      try {
+        await renderFn(mainContent, ...args);
+      } catch (err) {
+        console.error('Error rendering section:', err);
+        showNotification('Error al cargar la sección. Intente de nuevo.', 'error');
+        if (mainContent) {
+          mainContent.innerHTML = `
+            <div class="card glass animate-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; text-align: center; padding: 2.5rem; margin: 2rem auto; max-width: 400px; border-top: 4px solid var(--danger);">
+              <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: var(--danger); margin-bottom: 1rem;"></i>
+              <h3 style="color: var(--danger); margin-bottom: 0.5rem; font-weight: 600;">Error de Conexión</h3>
+              <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; margin-bottom: 1.5rem;">No se pudieron cargar los datos desde el servidor. Comprueba tu conexión a internet o vuelve a intentarlo.</p>
+              <button id="retry-nav-btn" class="btn-primary" style="width: auto; padding: 0.75rem 2rem; display: flex; align-items: center; gap: 0.5rem; justify-content: center;">
+                <i data-lucide="refresh-cw" style="width: 16px;"></i> <span>Reintentar</span>
+              </button>
+            </div>
+          `;
+          if (window.lucide) window.lucide.createIcons();
+          const retryBtn = mainContent.querySelector('#retry-nav-btn');
+          if (retryBtn) {
+            retryBtn.onclick = () => navigateTo(renderFn, ...args);
+          }
+        }
+      } finally {
+        isFinished = true;
+        clearTimeout(slowTimer);
+      }
+    }, 50);
+  };
+
   document.querySelector('#logout-btn').addEventListener('click', () => supabase.auth.signOut());
-  document.querySelector('#profile-btn').addEventListener('click', () => renderProfile(document.querySelector('#main-content'), profile));
-  document.querySelector('#view-stats-btn').addEventListener('click', () => renderUserStats(document.querySelector('#main-content'), session.user.id));
+  document.querySelector('#profile-btn').addEventListener('click', () => navigateTo(renderProfile, profile));
+  document.querySelector('#view-stats-btn').addEventListener('click', () => navigateTo(renderUserStats, session.user.id));
+  
+  document.querySelector('#view-my-rights-btn')?.addEventListener('click', () => {
+    navigateTo(renderUserRightsDashboard);
+  });
   
   document.querySelector('#view-full-history-btn')?.addEventListener('click', () => {
-    const mainContent = document.querySelector('#main-content');
-    if (mainContent) renderUserAuthHistory(mainContent);
+    navigateTo(renderUserAuthHistory);
   });
   
   document.querySelector('#request-auth-btn')?.addEventListener('click', () => {
@@ -396,15 +479,15 @@ async function renderDashboard() {
   });
   
   if (['director', 'vicedirector', 'rrhh'].includes(profile?.role)) {
-    document.querySelector('#nav-abm')?.addEventListener('click', () => renderABM(document.querySelector('#main-content')));
-    document.querySelector('#nav-auths')?.addEventListener('click', () => renderAuthorizations(document.querySelector('#main-content')));
-    document.querySelector('#nav-holidays')?.addEventListener('click', () => renderHolidays(document.querySelector('#main-content')));
-    document.querySelector('#nav-daily')?.addEventListener('click', () => renderDailyReports(document.querySelector('#main-content'), settings));
-    document.querySelector('#nav-reports')?.addEventListener('click', () => renderAdvancedReports(document.querySelector('#main-content')));
-    document.querySelector('#nav-settings')?.addEventListener('click', () => renderAdminSettings(document.querySelector('#main-content'), settings));
-    document.querySelector('#nav-logs')?.addEventListener('click', () => renderLogs(document.querySelector('#main-content')));
-    document.querySelector('#nav-security')?.addEventListener('click', () => renderSecurityPanel(document.querySelector('#main-content')));
-    document.querySelector('#nav-analytics')?.addEventListener('click', () => renderAnalytics(document.querySelector('#main-content'), settings));
+    document.querySelector('#nav-abm')?.addEventListener('click', () => navigateTo(renderABM));
+    document.querySelector('#nav-auths')?.addEventListener('click', () => navigateTo(renderAuthorizations));
+    document.querySelector('#nav-holidays')?.addEventListener('click', () => navigateTo(renderHolidays));
+    document.querySelector('#nav-daily')?.addEventListener('click', () => navigateTo(renderDailyReports, settings));
+    document.querySelector('#nav-reports')?.addEventListener('click', () => navigateTo(renderAdvancedReports));
+    document.querySelector('#nav-settings')?.addEventListener('click', () => navigateTo(renderAdminSettings, settings));
+    document.querySelector('#nav-logs')?.addEventListener('click', () => navigateTo(renderLogs));
+    document.querySelector('#nav-security')?.addEventListener('click', () => navigateTo(renderSecurityPanel));
+    document.querySelector('#nav-analytics')?.addEventListener('click', () => navigateTo(renderAnalytics, settings));
   }
   document.querySelector('#notif-bell')?.addEventListener('click', () => showNotificationsModal());
   
@@ -591,12 +674,12 @@ async function fetchAdminAlerts() {
     .lt('check_in', `${today}T00:00:00.000Z`)
     .order('check_in', { ascending: false });
 
-  // 4c. Articlo 85 Limits (using 2024 as current year for calc or dynamic)
+  // 4c. Ausente con aviso Limits
   const currentYear = new Date().getFullYear();
   const { data: art85Auths } = await supabase.from('authorizations')
     .select('user_id')
     .eq('status', 'approved')
-    .eq('type', 'Razones Particulares (Art. 85)')
+    .eq('type', 'Ausente con aviso')
     .gte('start_date', `${currentYear}-01-01`);
   
   const art85Counts = {};
@@ -847,6 +930,231 @@ async function renderUserAuthHistory(container) {
   renderTable();
 }
 
+async function renderUserRightsDashboard(container) {
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth();
+  
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; color: var(--text-muted); width: 100%; text-align: center; padding: 2rem;">
+      <div class="loading-spinner" style="width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--secondary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem;"></div>
+      <p style="font-size: 0.875rem; font-weight: 300; font-family: var(--font-main);">Calculando consumo de beneficios y derechos...</p>
+    </div>
+  `;
+
+  let stats = { limits_usage: {} };
+  let authsData = [];
+
+  try {
+    const [resStats, resAuths] = await Promise.all([
+      getUserStats(session.user.id, currentYear, currentMonth),
+      supabase
+        .from('authorizations')
+        .select(`
+          id, type, start_date, end_date, status, notes, admin_notes,
+          approver:profiles!approved_by ( first_name, last_name )
+        `)
+        .eq('user_id', session.user.id)
+        .order('start_date', { ascending: false })
+    ]);
+    stats = resStats || { limits_usage: {} };
+    authsData = resAuths.data || [];
+  } catch (err) {
+    console.error('Error fetching rights dashboard data:', err);
+  }
+
+  // Build limits progress list
+  const limitsHtml = Object.keys(stats.limits_usage || {}).map(type => {
+    const u = stats.limits_usage[type];
+    
+    // Check if it has a yearly limit
+    const hasYearlyLimit = u.max_year !== null && u.max_year !== undefined;
+    
+    let percent = 0;
+    if (hasYearlyLimit) {
+      percent = Math.min(100, (u.used / u.max_year) * 100);
+    } else if (u.max_month !== null && u.max_month !== undefined && u.max_month > 0) {
+      percent = Math.min(100, (u.used_month / u.max_month) * 100);
+    }
+    
+    const barColor = percent >= 90 ? 'var(--danger)' : percent >= 60 ? 'var(--warning)' : 'var(--success)';
+    
+    let labelText = '';
+    let detailText = '';
+    
+    if (hasYearlyLimit) {
+      labelText = `${u.used} / ${u.max_year} días usados`;
+      if (u.max_month !== null && u.max_month !== undefined && u.max_month > 0) {
+        detailText = `(Quedan ${u.remaining} en el año - ${u.remaining_month} este mes)`;
+      } else {
+        detailText = `(Quedan ${u.remaining})`;
+      }
+    } else {
+      // Monthly only (like Media Jornada)
+      labelText = `${u.used_month} / ${u.max_month} permisos este mes`;
+      detailText = `(Quedan ${u.remaining_month} este mes)`;
+    }
+
+    return `
+      <div style="margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 0.35rem;">
+          <span><strong>${type}</strong></span>
+          <span style="color: var(--text-muted);">${labelText} <span style="color: var(--success); font-weight: bold; margin-left: 0.5rem;">${detailText}</span></span>
+        </div>
+        <div style="background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid var(--glass-border);">
+          <div style="background: ${barColor}; width: ${percent}%; height: 100%; border-radius: 4px; transition: width 0.3s ease;"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Agreement explanations
+  const rightsInfoHtml = `
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1rem; max-height: 480px; overflow-y: auto; padding-right: 0.5rem;">
+      <div style="background: rgba(255,255,255,0.02); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+        <h5 style="color: var(--secondary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.25rem;"><i data-lucide="alert-circle" style="width:16px;"></i> Ausentes con aviso</h5>
+        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+          Ausencias de una jornada completa por razones personales. Límite: <strong>6 días por año</strong> (máximo <strong>2 días por mes</strong>). Requiere aviso previo de 24 horas. No compensable.
+        </p>
+      </div>
+      <div style="background: rgba(255,255,255,0.02); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+        <h5 style="color: var(--secondary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.25rem;"><i data-lucide="clock" style="width:16px;"></i> Permisos de media jornada</h5>
+        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+          Permiso para ausentarse media jornada (ingreso tardío o retiro temprano). Límite: <strong>2 permisos por mes</strong>. No compensable.
+        </p>
+      </div>
+      <div style="background: rgba(255,255,255,0.02); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+        <h5 style="color: var(--secondary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.25rem;"><i data-lucide="log-out" style="width:16px;"></i> Permisos de salidas excepcionales</h5>
+        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+          Jornada ultra reducida (se trabajan solo 2 horas, reduciendo 5 horas). Límite: <strong>5 permisos por año</strong>. No compensable.
+        </p>
+      </div>
+      <div style="background: rgba(255,255,255,0.02); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+        <h5 style="color: var(--secondary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.25rem;"><i data-lucide="heart" style="width:16px;"></i> Atención de familiar enfermo</h5>
+        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+          Cuidado de familiar directo enfermo (cónyuge, conviviente, padres, hijos, hermanos a cargo). Límite: <strong>30 días al año</strong> con goce de haberes (extensible a 100 días adicionales).
+        </p>
+      </div>
+      <div style="background: rgba(255,255,255,0.02); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+        <h5 style="color: var(--secondary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.25rem;"><i data-lucide="heart-pulse" style="width:16px;"></i> Enfermedades (Salud)</h5>
+        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+          <strong>Corto Tratamiento:</strong> Hasta 45 días corridos por año (continuos o discontinuos). <strong>Largo Tratamiento:</strong> Hasta 2 años al 100% de sueldo, 1 año al 50% y 1 año extra sin goce.
+        </p>
+      </div>
+      <div style="background: rgba(255,255,255,0.02); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+        <h5 style="color: var(--secondary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.25rem;"><i data-lucide="baby" style="width:16px;"></i> Maternidad, Paternidad y Familia</h5>
+        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+          <strong>Gestante:</strong> 90 días + 90 días adicionales posnacimiento. <strong>No gestante / Adopción:</strong> 30 / 45 días corridos. <strong>Lactancia:</strong> 2 hs diarias (240 días).
+        </p>
+      </div>
+      <div style="background: rgba(255,255,255,0.02); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+        <h5 style="color: var(--secondary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.25rem;"><i data-lucide="graduation-cap" style="width:16px;"></i> Licencias por Estudios y Exámenes</h5>
+        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+          Días para rendir exámenes. Límite anual: <strong>20 días</strong> (Secundario, máx 4d/examen), <strong>24 días</strong> (Terciario, máx 4d/examen) o <strong>28 días</strong> (Universitario, máx 5d/examen).
+        </p>
+      </div>
+      <div style="background: rgba(255,255,255,0.02); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+        <h5 style="color: var(--secondary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.25rem;"><i data-lucide="users" style="width:16px;"></i> Casamiento y Fallecimiento</h5>
+        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+          <strong>Matrimonio:</strong> 10 días hábiles (hijo: 2d). <strong>Fallecimiento:</strong> Cónyuge/padres/hijos: 10d (+15d si hay menores); hermanos/abuelos: 5d; suegros/cuñados: 1d.
+        </p>
+      </div>
+      <div style="background: rgba(255,255,255,0.02); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+        <h5 style="color: var(--secondary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.25rem;"><i data-lucide="shield" style="width:16px;"></i> Género, Deportes y Sangre</h5>
+        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+          <strong>Género:</strong> Licencia extraordinaria con goce de haberes. <strong>Deportes/Cultural:</strong> Representación oficial hasta 15 días hábiles. <strong>Sangre:</strong> 1 día de justificación.
+        </p>
+      </div>
+    </div>
+  `;
+
+  // Solicitudes history
+  let historyHtml = '';
+  if (authsData.length === 0) {
+    historyHtml = `<p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 2rem;">No tienes solicitudes de beneficios registradas aún.</p>`;
+  } else {
+    historyHtml = `
+      <div class="table-wrapper" style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+          <thead>
+            <tr style="background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--glass-border);">
+              <th style="padding: 0.75rem 1rem; color: var(--secondary);">Beneficio / Licencia</th>
+              <th style="padding: 0.75rem 1rem; color: var(--secondary);">Periodo</th>
+              <th style="padding: 0.75rem 1rem; color: var(--secondary);">Estado</th>
+              <th style="padding: 0.75rem 1rem; color: var(--secondary);">Autorizante</th>
+              <th style="padding: 0.75rem 1rem; color: var(--secondary);">Detalles / Notas</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${authsData.map(a => {
+              const start = a.start_date ? new Date(a.start_date).toLocaleDateString() : '---';
+              const end = a.end_date ? new Date(a.end_date).toLocaleDateString() : '---';
+              const period = start === end ? start : `${start} al ${end}`;
+              const approverName = a.approver ? `${a.approver.first_name} ${a.approver.last_name}` : (a.status === 'approved' || a.status === 'rejected' ? 'Administrador' : '---');
+              return `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td style="padding: 0.75rem 1rem; font-weight: 500;">${a.type}</td>
+                  <td style="padding: 0.75rem 1rem; color: var(--text-muted);">${period}</td>
+                  <td style="padding: 0.75rem 1rem;">
+                    <span class="badge badge-${a.status}">${a.status.toUpperCase()}</span>
+                  </td>
+                  <td style="padding: 0.75rem 1rem; color: var(--text-muted); font-size: 0.8rem;">${approverName}</td>
+                  <td style="padding: 0.75rem 1rem; font-size: 0.8rem; color: var(--text-muted); max-width: 250px;">
+                    <div>${a.notes || '---'}</div>
+                    ${a.admin_notes ? `<div style="margin-top: 0.25rem; color: var(--secondary); font-weight: 500;">Respuesta: ${a.admin_notes}</div>` : ''}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  container.innerHTML = `
+    <div class="animate-in">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h2 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="award" style="color: var(--secondary);"></i> Mi Resumen de Derechos y Licencias</h2>
+        <button id="back-to-dash" class="btn-secondary" style="width: auto;">Volver al Dashboard</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+        
+        <!-- Left Panel: Dynamic usage of limits -->
+        <div class="card glass" style="padding: 1.5rem; border-left: 4px solid var(--secondary); display: flex; flex-direction: column;">
+          <h3 class="card-title" style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="activity"></i> Consumo de Beneficios (${currentYear})</h3>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem;">Visualiza los días que has tomado respecto al límite anual del Convenio Colectivo.</p>
+          <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+            ${limitsHtml || '<p style="color: var(--text-muted); font-size: 0.85rem;">Sin límites dinámicos calculados.</p>'}
+          </div>
+        </div>
+
+        <!-- Right Panel: Information of Collective Rights -->
+        <div class="card glass" style="padding: 1.5rem; border-left: 4px solid var(--primary-light);">
+          <h3 class="card-title" style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="book-open"></i> Derechos del Convenio Colectivo</h3>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Conoce el detalle y las justificaciones de cada una de tus licencias protegidas por convenio:</p>
+          ${rightsInfoHtml}
+        </div>
+
+      </div>
+
+      <div class="card glass" style="padding: 1.5rem; margin-top: 2rem;">
+        <h3 class="card-title" style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="history"></i> Detalle de Solicitudes y Respuestas</h3>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem;">Consulta el estado de cada una de tus solicitudes enviadas, incluyendo quién las autorizó.</p>
+        ${historyHtml}
+      </div>
+
+      <button id="back-to-dash-bottom" class="btn-secondary" style="margin-top: 2rem; width: auto; background: var(--surface);">Volver al Dashboard</button>
+    </div>
+  `;
+
+  if (window.lucide) window.lucide.createIcons();
+
+  const handleBack = () => renderDashboard();
+  container.querySelector('#back-to-dash').onclick = handleBack;
+  container.querySelector('#back-to-dash-bottom').onclick = handleBack;
+}
+
 function renderRequestForm() {
   const container = document.querySelector('#main-content');
   container.innerHTML = `
@@ -857,17 +1165,18 @@ function renderRequestForm() {
         <div class="form-group">
           <label>Motivo / Tipo</label>
           <select id="auth-type" required>
-            <option value="Razones Particulares (Art. 85)">Razones Particulares (Art. 85)</option>
-            <option value="Examen (Estudio)">Examen (Estudio)</option>
-            <option value="Atención Familiar (Art. 75/76)">Atención Familiar (Art. 75/76)</option>
+            <option value="Ausente con aviso">Ausente con aviso</option>
+            <option value="Media Jornada">Media Jornada</option>
+            <option value="Salida Excepcional">Salida Excepcional (2hs max)</option>
+            <option value="Enfermedad de corto tratamiento">Enfermedad de corto tratamiento</option>
+            <option value="Atención de familiar enfermo">Atención de familiar enfermo</option>
+            <option value="Enfermedad de largo tratamiento">Enfermedad de largo tratamiento</option>
+            <option value="Examen">Examen</option>
             <option value="Licencia Anual (Vacaciones)">Licencia Anual (Vacaciones)</option>
+            <option value="Matrimonio">Matrimonio</option>
+            <option value="Maternidad / Paternidad">Maternidad / Paternidad</option>
             <option value="Fallecimiento (Cónyuge/Padres/Hijos)">Fallecimiento (Cónyuge/Padres/Hijos)</option>
             <option value="Fallecimiento (Hermanos/Nietos)">Fallecimiento (Hermanos/Nietos)</option>
-            <option value="Matrimonio">Matrimonio</option>
-            <option value="Mudanza">Mudanza</option>
-            <option value="Maternidad / Paternidad">Maternidad / Paternidad</option>
-            <option value="Media Jornada (Art. 87)">Media Jornada (Art. 87)</option>
-            <option value="Salida Excepcional">Salida Excepcional (2hs max)</option>
           </select>
         </div>
         <div class="form-group">
@@ -916,32 +1225,169 @@ function renderRequestForm() {
       return;
     }
 
-    // --- ART 85 VALIDATION ---
-    if (type === 'Razones Particulares (Art. 85)') {
+    // --- CONVENTION LIMITS VALIDATIONS ---
+    if (type === 'Ausente con aviso') {
       const start = new Date(startDate);
       const startYear = start.getFullYear();
       const startMonth = start.getMonth(); // 0-indexed
 
-      // Get all approved/pending Art 85 requests for this user in this year
+      // Get all approved/pending requests for this type
       const { data: yearReqs } = await supabase
         .from('authorizations')
-        .select('start_date')
+        .select('start_date, end_date')
         .eq('user_id', session.user.id)
-        .eq('type', 'Razones Particulares (Art. 85)')
+        .eq('type', 'Ausente con aviso')
         .gte('start_date', `${startYear}-01-01`)
         .lte('start_date', `${startYear}-12-31`)
         .neq('status', 'rejected');
 
-      if (yearReqs && yearReqs.length >= 6) {
-        showNotification('Ya has utilizado el cupo anual de 6 días para Razones Particulares.', 'error');
+      let daysUsedInYear = 0;
+      let daysUsedInMonth = 0;
+      if (yearReqs) {
+        yearReqs.forEach(r => {
+          const s = new Date(r.start_date.split('T')[0] + 'T00:00:00');
+          const e = new Date((r.end_date || r.start_date).split('T')[0] + 'T00:00:00');
+          const diffDays = Math.ceil(Math.abs(e - s) / (1000 * 60 * 60 * 24)) + 1;
+          daysUsedInYear += diffDays;
+          if (s.getMonth() === startMonth) {
+            daysUsedInMonth += diffDays;
+          }
+        });
+      }
+
+      if (daysUsedInYear >= 6) {
+        showNotification('Ya has utilizado el cupo anual de 6 días para Ausente con aviso.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Enviar Solicitud';
+        return;
+      }
+      if (daysUsedInMonth >= 2) {
+        showNotification('Ya has utilizado el cupo mensual de 2 días para Ausente con aviso.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Enviar Solicitud';
+        return;
+      }
+    }
+
+    if (type === 'Media Jornada') {
+      const start = new Date(startDate);
+      const startYear = start.getFullYear();
+      const startMonth = start.getMonth();
+
+      const { data: monthReqs } = await supabase
+        .from('authorizations')
+        .select('start_date')
+        .eq('user_id', session.user.id)
+        .eq('type', 'Media Jornada')
+        .gte('start_date', `${startYear}-${String(startMonth + 1).padStart(2, '0')}-01`)
+        .lte('start_date', `${startYear}-${String(startMonth + 1).padStart(2, '0')}-31`)
+        .neq('status', 'rejected');
+
+      if (monthReqs && monthReqs.length >= 2) {
+        showNotification('Ya has utilizado el cupo mensual de 2 permisos para Media Jornada.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Enviar Solicitud';
+        return;
+      }
+    }
+
+    if (type === 'Salida Excepcional') {
+      const start = new Date(startDate);
+      const startYear = start.getFullYear();
+
+      const { data: yearReqs } = await supabase
+        .from('authorizations')
+        .select('start_date')
+        .eq('user_id', session.user.id)
+        .eq('type', 'Salida Excepcional')
+        .gte('start_date', `${startYear}-01-01`)
+        .lte('start_date', `${startYear}-12-31`)
+        .neq('status', 'rejected');
+
+      if (yearReqs && yearReqs.length >= 5) {
+        showNotification('Ya has utilizado el cupo anual de 5 permisos para Salida Excepcional.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Enviar Solicitud';
+        return;
+      }
+    }
+
+    if (type === 'Examen') {
+      // 1. Fetch user's profile to get is_studying and study_level
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('is_studying, study_level')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (!userProfile?.is_studying) {
+        showNotification('No puedes solicitar licencia por Examen porque no estás registrado como estudiante en tu perfil.', 'error');
         btn.disabled = false;
         btn.textContent = 'Enviar Solicitud';
         return;
       }
 
-      const monthReqs = yearReqs?.filter(r => new Date(r.start_date).getMonth() === startMonth);
-      if (monthReqs && monthReqs.length >= 2) {
-        showNotification('Ya has utilizado el cupo mensual de 2 días para Razones Particulares.', 'error');
+      const studyLevel = userProfile.study_level;
+      let yearlyLimit = 0;
+      let maxConsecutive = 4;
+      let levelLabel = '';
+
+      if (studyLevel === 'secundario') {
+        yearlyLimit = 20;
+        maxConsecutive = 4;
+        levelLabel = 'Secundario';
+      } else if (studyLevel === 'terciario') {
+        yearlyLimit = 24;
+        maxConsecutive = 4;
+        levelLabel = 'Terciario / Profesorado';
+      } else if (studyLevel === 'universitario_posgrado') {
+        yearlyLimit = 28;
+        maxConsecutive = 5;
+        levelLabel = 'Universitario / Posgrado';
+      } else {
+        showNotification('Por favor, selecciona un nivel de estudios válido en tu perfil.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Enviar Solicitud';
+        return;
+      }
+
+      // Calculate days in current request
+      const start = new Date(startDate);
+      const end = new Date(endDate || startDate);
+      const diffTime = Math.abs(end - start);
+      const requestedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+      // Check consecutive days
+      if (requestedDays > maxConsecutive) {
+        showNotification(`Para el nivel ${levelLabel}, la licencia máxima por examen es de ${maxConsecutive} días corridos.`, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Enviar Solicitud';
+        return;
+      }
+
+      // Fetch existing approved/pending Examen requests for this year
+      const startYear = start.getFullYear();
+      const { data: existingReqs } = await supabase
+        .from('authorizations')
+        .select('start_date, end_date')
+        .eq('user_id', session.user.id)
+        .eq('type', 'Examen')
+        .gte('start_date', `${startYear}-01-01`)
+        .lte('start_date', `${startYear}-12-31`)
+        .neq('status', 'rejected');
+
+      let daysUsedInYear = 0;
+      if (existingReqs) {
+        existingReqs.forEach(r => {
+          const s = new Date(r.start_date.split('T')[0] + 'T00:00:00');
+          const e = new Date((r.end_date || r.start_date).split('T')[0] + 'T00:00:00');
+          const diff = Math.ceil(Math.abs(e - s) / (1000 * 60 * 60 * 24)) + 1;
+          daysUsedInYear += diff;
+        });
+      }
+
+      if (daysUsedInYear + requestedDays > yearlyLimit) {
+        showNotification(`Esta solicitud supera tu límite anual de ${yearlyLimit} días de examen para nivel ${levelLabel} (has usado ${daysUsedInYear} días y solicitas ${requestedDays}).`, 'error');
         btn.disabled = false;
         btn.textContent = 'Enviar Solicitud';
         return;
@@ -1142,6 +1588,46 @@ async function initClockIn() {
   const btn = document.querySelector('#clock-in-btn');
   const statusText = document.querySelector('#clock-in-status');
   
+  // If user is director or vicedirector, we completely bypass geofencing checking
+  const isDirectorOrVice = ['director', 'vicedirector'].includes(profile?.role);
+  if (isDirectorOrVice) {
+    if (statusText) {
+      statusText.textContent = '📍 Modo Administrativo (Sin restricción de ubicación)';
+      statusText.style.color = 'var(--success)';
+    }
+    
+    try {
+      const { data: lastRecord } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .is('check_out', null)
+        .order('check_in', { ascending: false })
+        .limit(1)
+        .single();
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const lastRecordDate = lastRecord && (lastRecord.check_in || lastRecord.created_at);
+      const isLastRecordToday = lastRecordDate && lastRecordDate.split('T')[0] === todayStr;
+
+      if (lastRecord && isLastRecordToday) {
+        btn.textContent = 'Fichar Salida';
+        btn.onclick = () => handleClockOut(lastRecord.id);
+      } else {
+        if (lastRecord && !isLastRecordToday) {
+          statusText.innerHTML += `<br><span style="font-size: 0.75rem; color: var(--warning); opacity: 0.8;">⚠️ Olvido de salida detectado (${new Date(lastRecord.check_in).toLocaleDateString()}).</span>`;
+        }
+        btn.textContent = 'Fichar Entrada';
+        btn.onclick = () => handleClockIn({ lat: 0, long: 0, accuracy: 0 }); // Placeholder GPS
+      }
+      btn.disabled = false;
+      isGeoLoading = false;
+      return;
+    } catch (e) {
+      console.error('Error in administrative clock in check:', e);
+    }
+  }
+
   try {
     const pos = await getCurrentPosition();
     const config = settings?.school_location;
@@ -1166,7 +1652,8 @@ async function initClockIn() {
         .single();
 
       const todayStr = new Date().toISOString().split('T')[0];
-      const isLastRecordToday = lastRecord && lastRecord.check_in.split('T')[0] === todayStr;
+      const lastRecordDate = lastRecord && (lastRecord.check_in || lastRecord.created_at);
+      const isLastRecordToday = lastRecordDate && lastRecordDate.split('T')[0] === todayStr;
 
       if (lastRecord && isLastRecordToday) {
         btn.textContent = 'Fichar Salida';
@@ -1181,7 +1668,7 @@ async function initClockIn() {
       btn.disabled = false;
       isGeoLoading = false;
     } else {
-      statusText.textContent = `🚫 Estás a ${Math.round(distance)}m. Debes estar en las inmediaciones para fichar.`;
+      statusText.textContent = `🚫 Estás a ${Math.round(distance)}m (Precisión: ±${Math.round(pos.accuracy)}m). Debes estar en las inmediaciones para fichar.`;
       statusText.style.color = 'var(--danger)';
       btn.textContent = 'Fuera de Rango';
       btn.disabled = true;

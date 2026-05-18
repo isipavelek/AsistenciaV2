@@ -1,5 +1,15 @@
 import { supabase } from './supabase.js';
 
+export function normalizeAuthType(type) {
+  if (!type) return '';
+  if (type === 'Razones Particulares (Art. 85)') return 'Ausente con aviso';
+  if (type === 'Media Jornada (Art. 87)') return 'Media Jornada';
+  if (type === 'Atención Familiar (Art. 75/76)' || type === 'Atención Familiar') return 'Atención de familiar enfermo';
+  if (type === 'Examen (Estudio)') return 'Examen';
+  if (type === 'Médico - Corto Tratamiento') return 'Enfermedad de corto tratamiento';
+  return type;
+}
+
 /**
  * Statistics Engine for Attendance and Convention Limits
  */
@@ -45,16 +55,36 @@ export async function getUserStats(userId, year = new Date().getFullYear(), mont
 
   const activeDaysOfWeek = new Set(schedules?.map(s => s.day_of_week) || []);
 
-  // 2. Fetch authorizations (licencias)
+  // 2. Fetch authorizations (licencias) for the entire year to calculate accurate limits
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
   const { data: auths, error: authError } = await supabase
     .from('authorizations')
     .select('*')
     .eq('user_id', userId)
     .eq('status', 'approved')
-    .gte('start_date', startDate)
-    .lte('start_date', endDate);
+    .gte('start_date', yearStart)
+    .lte('start_date', yearEnd);
 
   if (authError) throw authError;
+
+  // 1d. Fetch User Profile to check study level and adjust Examen limits
+  const { data: userProfile } = await supabase
+    .from('profiles')
+    .select('is_studying, study_level')
+    .eq('id', userId)
+    .maybeSingle();
+
+  let examenLimit = 0;
+  if (userProfile?.is_studying) {
+    if (userProfile.study_level === 'secundario') {
+      examenLimit = 20;
+    } else if (userProfile.study_level === 'terciario') {
+      examenLimit = 24;
+    } else if (userProfile.study_level === 'universitario_posgrado') {
+      examenLimit = 28;
+    }
+  }
 
   // 3. Get convention limits and attendance period from settings
   const { data: settingsData } = await supabase.from('settings').select('*');
@@ -63,10 +93,13 @@ export async function getUserStats(userId, year = new Date().getFullYear(), mont
     return acc;
   }, {}) || {};
 
-  const limits = settingsObj.convention_limits || {
-    'Médico - Corto Tratamiento': { year: 45, month: 15 },
-    'Atención Familiar': { year: 20, month: 5 },
-    'Examen': { year: 28, month: 5 }
+  const limits = {
+    "Ausente con aviso": { year: 6, month: 2 },
+    "Media Jornada": { year: null, month: 2 },
+    "Salida Excepcional": { year: 5, month: null },
+    "Enfermedad de corto tratamiento": { year: 45, month: null },
+    "Atención de familiar enfermo": { year: 30, month: null },
+    "Examen": { year: examenLimit, month: null }
   };
   
   const period = settingsObj.attendance_period;
@@ -87,7 +120,9 @@ export async function getUserStats(userId, year = new Date().getFullYear(), mont
 
   const attMap = new Map();
   attendance.forEach(a => {
-    const d = a.check_in.split('T')[0];
+    const dateVal = a.check_in || a.check_out || a.created_at;
+    if (!dateVal) return;
+    const d = dateVal.split('T')[0];
     attMap.set(d, a);
   });
 
@@ -148,13 +183,32 @@ export async function getUserStats(userId, year = new Date().getFullYear(), mont
     current.setDate(current.getDate() + 1);
   }
 
-  // 5. Calculate Convention Usage (Yearly)
+  // 5. Calculate Convention Usage (Yearly and Monthly)
+  const targetMonth = month !== null ? month : new Date().getMonth();
+
   Object.keys(limits).forEach(type => {
-    const usedInYear = auths.filter(a => a.type === type).length;
+    let usedInYear = 0;
+    let usedInMonth = 0;
+
+    auths?.filter(a => normalizeAuthType(a.type) === type).forEach(a => {
+      const start = new Date(a.start_date.split('T')[0] + 'T00:00:00');
+      const end = new Date((a.end_date || a.start_date).split('T')[0] + 'T00:00:00');
+      const diffTime = Math.abs(end - start);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      
+      usedInYear += diffDays;
+      if (start.getMonth() === targetMonth) {
+        usedInMonth += diffDays;
+      }
+    });
+
     stats.limits_usage[type] = {
       used: usedInYear,
       max_year: limits[type].year,
-      remaining: Math.max(0, limits[type].year - usedInYear)
+      remaining: limits[type].year !== null ? Math.max(0, limits[type].year - usedInYear) : null,
+      used_month: usedInMonth,
+      max_month: limits[type].month,
+      remaining_month: limits[type].month !== null ? Math.max(0, limits[type].month - usedInMonth) : null
     };
     stats.licenseUsage[type] = usedInYear;
   });
@@ -173,16 +227,13 @@ export async function getUserStats(userId, year = new Date().getFullYear(), mont
  * Fetches convention limits from settings
  */
 export async function getConventionLimits() {
-  const { data: settingsData } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', 'convention_limits')
-    .single();
-  
-  return settingsData?.value || {
-    'Médico - Corto Tratamiento': { year: 45, month: 15 },
-    'Atención Familiar': { year: 20, month: 5 },
-    'Examen': { year: 28, month: 5 }
+  return {
+    "Ausente con aviso": { year: 6, month: 2 },
+    "Media Jornada": { year: null, month: 2 },
+    "Salida Excepcional": { year: 5, month: null },
+    "Enfermedad de corto tratamiento": { year: 45, month: null },
+    "Atención de familiar enfermo": { year: 30, month: null },
+    "Examen": { year: 28, month: null }
   };
 }
 

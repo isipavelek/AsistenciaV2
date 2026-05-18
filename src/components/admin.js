@@ -71,6 +71,7 @@ export async function renderABM(container) {
               <th class="sortable" data-sort="legajo_utn" style="padding: 1rem; cursor: pointer;">Legajo <i data-lucide="chevrons-up-down" style="width: 14px; vertical-align: middle;"></i></th>
               <th class="sortable" data-sort="role" style="padding: 1rem; cursor: pointer;">Rol <i data-lucide="chevrons-up-down" style="width: 14px; vertical-align: middle;"></i></th>
               <th class="sortable" data-sort="category" style="padding: 1rem; cursor: pointer;">Categoría <i data-lucide="chevrons-up-down" style="width: 14px; vertical-align: middle;"></i></th>
+              <th class="sortable" data-sort="is_studying" style="padding: 1rem; cursor: pointer;">Estudios <i data-lucide="chevrons-up-down" style="width: 14px; vertical-align: middle;"></i></th>
               <th style="padding: 1rem;">Acciones</th>
             </tr>
           </thead>
@@ -84,10 +85,9 @@ export async function renderABM(container) {
 
     <!-- User Modal (Remains the same as before) -->
     <div id="user-modal" class="modal-overlay" style="display: none;">
-      <div class="card glass modal-content" style="max-width: 500px; width: 90%;">
+      <div class="card glass modal-content" style="max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
         <h2 id="modal-title">Nuevo Usuario</h2>
         <form id="user-form">
-          <!-- ... (modal content kept as is for brevity, will be in full file) ... -->
           <input type="hidden" id="user-id">
           <div class="form-group">
             <label>Correo Electrónico</label>
@@ -140,7 +140,27 @@ export async function renderABM(container) {
               <input type="date" id="user-seniority">
             </div>
           </div>
-          <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+          
+          <div class="form-group" style="margin: 1rem 0; display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" id="user-is-studying" style="width: auto; margin: 0;">
+            <label for="user-is-studying" style="margin: 0; cursor: pointer; font-weight: 500;">¿Se encuentra estudiando actualmente?</label>
+          </div>
+          
+          <div id="user-study-details-container" style="display: none; background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--glass-border); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+            <div class="form-group" style="margin-bottom: 0.5rem;">
+              <label style="color: var(--secondary); font-weight: 600;">Nivel de Estudios</label>
+              <select id="user-study-level" style="background: var(--surface); color: white; border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.5rem; width: 100%;">
+                <option value="secundario">Secundario (Límite: 20 días hábiles, máx 4 continuos)</option>
+                <option value="terciario">Terciario / Profesorado (Límite: 24 días hábiles, máx 4 continuos)</option>
+                <option value="universitario_posgrado">Universitario / Posgrado (Límite: 28 días hábiles, máx 5 continuos)</option>
+              </select>
+            </div>
+            <div id="user-certificate-display" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
+              <!-- Cargar certificado visualizador enlace dinámico -->
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
             <button type="submit" style="background: var(--accent-gradient);">Guardar</button>
             <button type="button" id="close-modal" style="background: var(--surface);">Cancelar</button>
           </div>
@@ -171,27 +191,42 @@ export async function renderABM(container) {
 
     // Apply Sorting
     filtered.sort((a, b) => {
-      let valA = a[currentSort.column] || '';
-      let valB = b[currentSort.column] || '';
+      let valA = a[currentSort.column];
+      let valB = b[currentSort.column];
       
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
+      if (currentSort.column === 'is_studying') {
+        valA = a.is_studying ? 1 : 0;
+        valB = b.is_studying ? 1 : 0;
+      } else {
+        valA = valA || '';
+        valB = valB || '';
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+      }
 
       if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
       if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
       return 0;
     });
 
-    tableBody.innerHTML = filtered.map(u => `
-      <tr style="border-bottom: 1px solid var(--glass-border);">
-        <td style="padding: 1rem;" data-label="Apellido">${u.last_name || '--'}</td>
-        <td style="padding: 1rem;" data-label="Nombre">${u.first_name || '--'}</td>
-        <td style="padding: 1rem; font-size: 0.875rem;" data-label="Email">${u.email}</td>
-        <td style="padding: 1rem;" data-label="Legajo">${u.legajo_utn || '--'}</td>
-        <td style="padding: 1rem;" data-label="Rol"><span class="badge" style="background: rgba(255,255,255,0.1);">${u.role}</span></td>
-        <td style="padding: 1rem;" data-label="Categoría">${u.category || '--'}</td>
-        <td style="padding: 1rem;" data-label="Acciones">
-          <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end;">
+    tableBody.innerHTML = filtered.map(u => {
+      let studyText = '<span style="color: var(--text-dim); font-size: 0.8rem;">No</span>';
+      if (u.is_studying) {
+        let levelName = u.study_level === 'secundario' ? 'Secundario' : u.study_level === 'terciario' ? 'Terciario' : 'Universitario';
+        studyText = `<span class="badge" style="background: rgba(167, 139, 250, 0.15); color: var(--secondary); font-size: 0.75rem; font-weight: 500;">Sí (${levelName})</span>`;
+      }
+
+      return `
+        <tr style="border-bottom: 1px solid var(--glass-border);">
+          <td style="padding: 1rem;" data-label="Apellido">${u.last_name || '--'}</td>
+          <td style="padding: 1rem;" data-label="Nombre">${u.first_name || '--'}</td>
+          <td style="padding: 1rem; font-size: 0.875rem;" data-label="Email">${u.email}</td>
+          <td style="padding: 1rem;" data-label="Legajo">${u.legajo_utn || '--'}</td>
+          <td style="padding: 1rem;" data-label="Rol"><span class="badge" style="background: rgba(255,255,255,0.1);">${u.role}</span></td>
+          <td style="padding: 1rem;" data-label="Categoría">${u.category || '--'}</td>
+          <td style="padding: 1rem;" data-label="Estudios">${studyText}</td>
+          <td style="padding: 1rem;" data-label="Acciones">
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end;">
             <button class="edit-user btn-icon-sq" data-id="${u.id}" title="Editar Perfil" style="background: var(--surface);">
               <i data-lucide="user-cog" style="width: 16px;"></i>
             </button>
@@ -207,7 +242,8 @@ export async function renderABM(container) {
           </div>
         </td>
       </tr>
-    `).join('');
+      `;
+    }).join('');
 
     if (window.lucide) window.lucide.createIcons();
   }
@@ -237,10 +273,23 @@ export async function renderABM(container) {
   // Modal logic
   const modal = container.querySelector('#user-modal');
   const userForm = container.querySelector('#user-form');
-  
+  const userIsStudyingCheckbox = container.querySelector('#user-is-studying');
+  const userStudyDetailsContainer = container.querySelector('#user-study-details-container');
+
+  userIsStudyingCheckbox.onchange = () => {
+    userStudyDetailsContainer.style.display = userIsStudyingCheckbox.checked ? 'block' : 'none';
+  };
+
   container.querySelector('#add-user-btn').onclick = () => {
     userForm.reset();
     container.querySelector('#user-id').value = '';
+    
+    // Clear study fields
+    userIsStudyingCheckbox.checked = false;
+    userStudyDetailsContainer.style.display = 'none';
+    container.querySelector('#user-study-level').value = 'secundario';
+    container.querySelector('#user-certificate-display').innerHTML = '';
+
     container.querySelector('#modal-title').textContent = 'Nuevo Usuario';
     container.querySelector('#password-group').style.display = 'block';
     container.querySelector('#email-note').style.display = 'none';
@@ -270,6 +319,23 @@ export async function renderABM(container) {
         container.querySelector('#user-category').value = user.category || '';
         container.querySelector('#user-seniority').value = user.seniority_date || '';
         
+        // Populate study fields
+        userIsStudyingCheckbox.checked = !!user.is_studying;
+        userStudyDetailsContainer.style.display = user.is_studying ? 'block' : 'none';
+        container.querySelector('#user-study-level').value = user.study_level || 'secundario';
+
+        const certDisplay = container.querySelector('#user-certificate-display');
+        if (user.student_certificate_url) {
+          certDisplay.innerHTML = `
+            <a href="${user.student_certificate_url}" target="_blank" style="color: var(--secondary); font-weight: 500; text-decoration: underline; display: inline-flex; align-items: center; gap: 0.25rem;">
+              <i data-lucide="external-link" style="width: 14px; height: 14px;"></i> Ver Certificado Cargado
+            </a>
+          `;
+        } else {
+          certDisplay.innerHTML = `<em>Sin certificado cargado</em>`;
+        }
+        if (window.lucide) window.lucide.createIcons();
+
         container.querySelector('#modal-title').textContent = 'Editar Usuario';
         container.querySelector('#password-group').style.display = 'none';
         container.querySelector('#email-note').style.display = 'block';
@@ -313,6 +379,9 @@ export async function renderABM(container) {
     btn.disabled = true;
     btn.textContent = 'Guardando...';
 
+    const isStudying = userIsStudyingCheckbox.checked;
+    const studyLevel = container.querySelector('#user-study-level').value;
+
     const userData = {
       first_name: container.querySelector('#user-first-name').value,
       last_name: container.querySelector('#user-last-name').value,
@@ -320,8 +389,15 @@ export async function renderABM(container) {
       role: container.querySelector('#user-role').value,
       personnel_group: container.querySelector('#user-group').value,
       category: container.querySelector('#user-category').value,
-      seniority_date: container.querySelector('#user-seniority').value || null
+      seniority_date: container.querySelector('#user-seniority').value || null,
+      is_studying: isStudying,
+      study_level: isStudying ? studyLevel : null
     };
+
+    // If studies are disabled, also clear certificate
+    if (!isStudying) {
+      userData.student_certificate_url = null;
+    }
 
     try {
       if (id) {
@@ -961,6 +1037,55 @@ export async function renderReports(container) {
 }
 
 /**
+ * Helper to beautifully format audit log JSON details
+ */
+export function formatLogDetails(details) {
+  if (!details) return '<span style="color: var(--text-dim);">---</span>';
+  try {
+    const parsed = typeof details === 'string' ? JSON.parse(details) : details;
+    if (parsed && typeof parsed === 'object') {
+      let html = '';
+      if (parsed.target_user_name) {
+        html += `<div style="margin-bottom: 2px;">👤 <strong>Personal:</strong> ${parsed.target_user_name}</div>`;
+      }
+      if (parsed.check_in) {
+        html += `<div style="margin-bottom: 2px;">📥 <strong>Entrada:</strong> ${new Date(parsed.check_in).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</div>`;
+      }
+      if (parsed.check_out) {
+        html += `<div style="margin-bottom: 2px;">📤 <strong>Salida:</strong> ${parsed.check_out !== 'N/A' ? new Date(parsed.check_out).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '<span style="color:var(--warning)">Sin salida</span>'}</div>`;
+      }
+      if (parsed.old_check_in || parsed.new_check_in) {
+        const oldIn = parsed.old_check_in && parsed.old_check_in !== 'N/A' ? new Date(parsed.old_check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+        const newIn = parsed.new_check_in && parsed.new_check_in !== 'N/A' ? new Date(parsed.new_check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+        html += `<div style="margin-bottom: 2px;">🕒 <strong>Modif. Entrada:</strong> ${oldIn} ➡️ <span style="color:#4ade80; font-weight:bold;">${newIn}</span></div>`;
+      }
+      if (parsed.old_check_out || parsed.new_check_out) {
+        const oldOut = parsed.old_check_out && parsed.old_check_out !== 'N/A' ? new Date(parsed.old_check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+        const newOut = parsed.new_check_out && parsed.new_check_out !== 'N/A' ? new Date(parsed.new_check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+        html += `<div style="margin-bottom: 2px;">🕒 <strong>Modif. Salida:</strong> ${oldOut} ➡️ <span style="color:#4ade80; font-weight:bold;">${newOut}</span></div>`;
+      }
+      if (parsed.comment) {
+        html += `<div style="margin-top: 4px; padding: 4px 8px; background: rgba(255,255,255,0.03); border-left: 3px solid var(--secondary); border-radius: 4px; font-style: italic; color: var(--text-dim); font-size: 0.7rem;">"${parsed.comment}"</div>`;
+      }
+      if (parsed.admin_role) {
+        html += `<div style="margin-top: 4px; font-size: 0.65rem; color: var(--text-dim);">Autor: <span class="badge" style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${parsed.admin_role.toUpperCase()}</span></div>`;
+      }
+      
+      // Fallback formatting for other events (e.g. EXPORT_USERS_CSV)
+      if (!html) {
+        html = Object.entries(parsed)
+          .map(([key, val]) => `<strong>${key.replace('_', ' ')}:</strong> ${typeof val === 'object' ? JSON.stringify(val) : val}`)
+          .join('<br>');
+      }
+      return html;
+    }
+  } catch (e) {
+    // Return raw text if not JSON
+  }
+  return details;
+}
+
+/**
  * Renders the Audit Logs viewer
  */
 export async function renderLogs(container) {
@@ -986,7 +1111,7 @@ export async function renderLogs(container) {
                 <td style="padding: 1rem; font-size: 0.85rem; color: var(--text-muted);">${new Date(log.created_at).toLocaleString()}</td>
                 <td style="padding: 1rem;">${log.profiles?.last_name || 'Sistema'}, ${log.profiles?.first_name || ''}</td>
                 <td style="padding: 1rem;"><span class="badge" style="background: rgba(255,255,255,0.1); font-size: 0.75rem;">${log.action}</span></td>
-                <td style="padding: 1rem; font-size: 0.75rem; color: var(--text-dim); max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${log.details}</td>
+                <td style="padding: 1rem; font-size: 0.75rem; color: var(--text-dim); line-height: 1.4;">${formatLogDetails(log.details)}</td>
               </tr>
             `).join('')}
             ${logs.length === 0 ? '<tr><td colspan="4" style="padding: 2rem; text-align: center; color: var(--text-muted);">No hay registros de auditoría.</td></tr>' : ''}

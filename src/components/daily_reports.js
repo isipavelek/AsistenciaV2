@@ -84,9 +84,7 @@ export async function renderDailyReports(container, settings) {
           .lte('check_in', `${selectedDate}T23:59:59.999Z`),
         supabase.from('holidays').select('*').eq('date', selectedDate).maybeSingle(),
         supabase.from('daily_reports').select('*, items:daily_report_items(*)').eq('date', selectedDate).maybeSingle(),
-        supabase.from('authorizations')
-          .select('*')
-          .or(`and(start_date.lte.${selectedDate},end_date.gte.${selectedDate}),and(start_date.eq.${selectedDate},end_date.is.null)`)
+        supabase.from('authorizations').select('*')
       ]);
 
       if (resProfiles.error) throw resProfiles.error;
@@ -94,12 +92,22 @@ export async function renderDailyReports(container, settings) {
       if (resAttendance.error) throw resAttendance.error;
       if (resAuths.error) throw resAuths.error;
 
-      const profiles = resProfiles.data || [];
+      // Exclude director and vicedirector roles completely from Daily Reports
+      const profiles = (resProfiles.data || []).filter(p => !['director', 'vicedirector'].includes(p.role));
       const schedules = resSchedules.data || [];
       const attendance = resAttendance.data || [];
       const holiday = resHoliday.data;
       const existingReport = resExisting.data;
-      const allAuths = resAuths.data || [];
+      
+      // Filtrar autorizaciones en memoria para evitar errores de sintaxis y cuelgues de Supabase/PostgREST
+      const allAuths = (resAuths.data || []).filter(a => {
+        const start = new Date(a.start_date).toISOString().split('T')[0];
+        const end = a.end_date ? new Date(a.end_date).toISOString().split('T')[0] : null;
+        if (end) {
+          return selectedDate >= start && selectedDate <= end;
+        }
+        return selectedDate === start;
+      });
 
       // Check for pending auths
       const pendingAuths = allAuths.filter(a => a.status === 'pending');
@@ -279,55 +287,66 @@ export async function renderDailyReports(container, settings) {
   }
 
   async function handleFixOut(idx) {
-    const item = reportData[idx];
-    if (!item.attendance_id) return;
+    try {
+      const item = reportData[parseInt(idx)];
+      if (!item.attendance_id) return;
 
-    if (!confirm(`¿Cerrar la sesión de ${item.name} usando el horario programado (${item.scheduled_out})?`)) return;
+      if (!confirm(`¿Cerrar la sesión de ${item.name} usando el horario programado (${item.scheduled_out})?`)) return;
 
-    const [h, m] = item.scheduled_out.split(':');
-    const outDate = new Date(selectedDate);
-    outDate.setHours(parseInt(h), parseInt(m), 0, 0);
+      const [h, m] = item.scheduled_out.split(':');
+      const outDate = new Date(selectedDate + 'T00:00:00');
+      outDate.setHours(parseInt(h), parseInt(m), 0, 0);
 
-    const { error } = await supabase.from('attendance')
-      .update({ 
-        check_out: outDate.toISOString(),
-        metadata: { correction: 'administrative_close', corrected_at: new Date().toISOString() }
-      })
-      .eq('id', item.attendance_id);
+      const { error } = await supabase.from('attendance')
+        .update({ 
+          check_out: outDate.toISOString(),
+          metadata: { correction: 'administrative_close', corrected_at: new Date().toISOString() }
+        })
+        .eq('id', item.attendance_id);
 
-    if (error) {
-      showNotification('Error al corregir: ' + error.message, 'error');
-    } else {
-      showNotification('Sesión cerrada correctamente.', 'success');
-      item.novelty = 'Sin novedad';
-      item.is_authorized = true;
-      renderTable();
+      if (error) {
+        showNotification('Error al corregir: ' + error.message, 'error');
+      } else {
+        showNotification('Sesión cerrada correctamente.', 'success');
+        item.novelty = 'Sin novedad';
+        item.is_authorized = true;
+        await loadReport();
+      }
+    } catch (e) {
+      console.error(e);
+      showNotification('Error al cerrar sesión: ' + e.message, 'error');
     }
   }
 
   async function handleFixPresent(idx) {
-    const item = reportData[idx];
-    if (!confirm(`¿Marcar a ${item.name} como PRESENTE MANUAL para este día?`)) return;
+    try {
+      const item = reportData[parseInt(idx)];
+      if (!confirm(`¿Marcar a ${item.name} como PRESENTE MANUAL para este día?`)) return;
 
-    const [h, m] = item.schedule.split(' - ')[0].split(':'); 
-    const entryDate = new Date(selectedDate);
-    entryDate.setHours(parseInt(h), parseInt(m), 0, 0);
+      const schedulePart = item.schedule ? item.schedule.split(' - ')[0] : '08:00';
+      const [h, m] = schedulePart.split(':'); 
+      const entryDate = new Date(selectedDate + 'T00:00:00');
+      entryDate.setHours(parseInt(h || 8), parseInt(m || 0), 0, 0);
 
-    const { error } = await supabase.from('attendance').insert({
-      user_id: item.user_id,
-      check_in: entryDate.toISOString(),
-      check_out: entryDate.toISOString(), // Simplified placeholder for manual
-      status: 'present',
-      metadata: { correction: 'manual_presence', corrected_at: new Date().toISOString() }
-    });
+      const { error } = await supabase.from('attendance').insert({
+        user_id: item.user_id,
+        check_in: entryDate.toISOString(),
+        check_out: entryDate.toISOString(), // Simplificado
+        status: 'present',
+        metadata: { correction: 'manual_presence', corrected_at: new Date().toISOString() }
+      });
 
-    if (error) {
-      showNotification('Error: ' + error.message, 'error');
-    } else {
-      showNotification('Presencia registrada.', 'success');
-      item.novelty = 'Sin novedad';
-      item.is_authorized = true;
-      renderTable();
+      if (error) {
+        showNotification('Error: ' + error.message, 'error');
+      } else {
+        showNotification('Presencia registrada.', 'success');
+        item.novelty = 'Sin novedad';
+        item.is_authorized = true;
+        await loadReport();
+      }
+    } catch (e) {
+      console.error(e);
+      showNotification('Error al registrar presencia: ' + e.message, 'error');
     }
   }
 
@@ -372,10 +391,52 @@ export async function renderDailyReports(container, settings) {
       await supabase.from('daily_report_items').delete().eq('report_id', report.id);
       
       const { error: iError } = await supabase.from('daily_report_items').insert(items);
-
       if (iError) throw iError;
 
-      showNotification('Parte Diario consolidado con éxito', 'success');
+      // Sincronizar los cambios en caliente con la tabla 'attendance' (ingreso/egreso) de manera ultra rápida en paralelo con Promise.all
+      const syncPromises = reportData.map(async (d) => {
+        let statusKey = 'present';
+        if (d.novelty === 'AUSENTE') statusKey = 'absent';
+        else if (d.novelty === 'TARDANZA') statusKey = 'late';
+        else if (d.novelty.includes('AUSENTE')) statusKey = 'absent';
+
+        if (d.attendance_id) {
+          // Si ya existe el registro de asistencia, lo actualizamos directamente
+          const { error } = await supabase.from('attendance')
+            .update({
+              status: statusKey,
+              is_justified: d.is_authorized,
+              justification_note: d.observation,
+              notes: d.observation
+            })
+            .eq('id', d.attendance_id);
+          if (error) console.error(`Error al actualizar asistencia para user ${d.user_id}:`, error);
+        } else if (statusKey !== 'present' || d.observation || d.is_authorized) {
+          // Si no existe pero tiene novedades cargadas en el parte, creamos el registro de asistencia correspondiente
+          const schedulePart = d.schedule ? d.schedule.split(' - ')[0] : '08:00';
+          const [h, m] = schedulePart.split(':');
+          const entryDate = new Date(selectedDate + 'T00:00:00');
+          entryDate.setHours(parseInt(h || 8), parseInt(m || 0), 0, 0);
+
+          const { error } = await supabase.from('attendance')
+            .insert({
+              user_id: d.user_id,
+              check_in: entryDate.toISOString(),
+              check_out: entryDate.toISOString(),
+              status: statusKey,
+              is_justified: d.is_authorized,
+              justification_note: d.observation,
+              notes: d.observation,
+              metadata: { correction: 'consolidated_report_sync', corrected_at: new Date().toISOString() }
+            });
+          if (error) console.error(`Error al insertar asistencia para user ${d.user_id}:`, error);
+        }
+      });
+
+      await Promise.all(syncPromises);
+
+      showNotification('Parte Diario consolidado y sincronizado con éxito', 'success');
+      await loadReport();
     } catch (err) {
       console.error('Error saving report:', err);
       showNotification('Error al guardar: ' + err.message, 'error');
@@ -394,57 +455,63 @@ export async function renderDailyReports(container, settings) {
     
     // Header
     doc.setFontSize(10);
-    doc.text('FECHA:', 14, 15);
+    doc.text('FECHA:', 10, 15);
     doc.setFont(undefined, 'bold');
-    doc.text(new Date(selectedDate).toLocaleDateString('es-AR'), 14, 20);
+    const [year, month, day] = selectedDate.split('-');
+    doc.text(`${day}/${month}/${year}`, 10, 20);
     doc.setFont(undefined, 'normal');
 
     // Table settings
-    const colLegajo = 14;
-    const colNombre = 35;
-    const colNovedad = 110;
-    const colAuth = 175;
+    const colLegajo = 10;
+    const colNombre = 32;
+    const colNovedad = 95;
+    const colAuth = 133;
+    const colObs = 150;
     let y = 30;
 
     // Header Table
     doc.setDrawColor(0);
-    doc.line(14, y, 196, y); // Top
+    doc.line(10, y, 200, y); // Top
     doc.text('Legajo', colLegajo + 2, y + 5);
     doc.text('Nombre y Apellido', colNombre + 2, y + 5);
     doc.text('Novedad', colNovedad + 2, y + 5);
     doc.text('Autorizado', colAuth + 1, y + 3);
     doc.setFontSize(8);
     doc.text('SI', colAuth + 2, y + 8);
-    doc.text('NO', colAuth + 12, y + 8);
+    doc.text('NO', colAuth + 10, y + 8);
     doc.setFontSize(10);
+    doc.text('Observación', colObs + 2, y + 5);
     
     y += 10;
-    doc.line(14, y, 196, y); // Row Line
+    doc.line(10, y, 200, y); // Row Line
 
     // Content
     reportData.forEach(item => {
       if (y > 270) { doc.addPage(); y = 20; }
       doc.text(String(item.legajo), colLegajo + 2, y + 5);
-      doc.text(item.name.substring(0, 35), colNombre + 2, y + 5);
-      doc.text(item.novelty, colNovedad + 2, y + 5);
+      doc.text(item.name.substring(0, 26), colNombre + 2, y + 5);
+      doc.text(item.novelty.substring(0, 18), colNovedad + 2, y + 5);
       
       // Checkboxes
       doc.rect(colAuth + 2, y + 2, 4, 4); // SI
-      doc.rect(colAuth + 12, y + 2, 4, 4); // NO
+      doc.rect(colAuth + 10, y + 2, 4, 4); // NO
       if (item.is_authorized) doc.text('X', colAuth + 3, y + 5);
-      else if (item.novelty !== 'Sin novedad') doc.text('X', colAuth + 13, y + 5);
+      else if (item.novelty !== 'Sin novedad') doc.text('X', colAuth + 11, y + 5);
+
+      doc.text((item.observation || '').substring(0, 24), colObs + 2, y + 5);
 
       y += 8;
-      doc.line(14, y, 196, y);
+      doc.line(10, y, 200, y);
     });
 
     // Vertical Lines
-    doc.line(14, 30, 14, y); // Left
+    doc.line(10, 30, 10, y); // Left
     doc.line(colNombre, 30, colNombre, y);
     doc.line(colNovedad, 30, colNovedad, y);
     doc.line(colAuth, 30, colAuth, y);
-    doc.line(colAuth + 10, 40, colAuth + 10, y);
-    doc.line(196, 30, 196, y); // Right
+    doc.line(colAuth + 8.5, 40, colAuth + 8.5, y);
+    doc.line(colObs, 30, colObs, y);
+    doc.line(200, 30, 200, y); // Right
 
     doc.save(`Parte_Diario_${selectedDate}.pdf`);
     showNotification('PDF generado con éxito', 'success');

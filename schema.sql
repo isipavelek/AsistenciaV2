@@ -111,10 +111,11 @@ CREATE POLICY "Users can edit own profile" ON profiles FOR UPDATE USING (auth.ui
 CREATE POLICY "Admins can view all profiles" ON profiles FOR SELECT USING (is_admin());
 CREATE POLICY "Admins can edit all profiles" ON profiles FOR ALL USING (is_admin());
 
--- Attendance: Users can view/create own, Admins can view all
+-- Attendance: Users can view/create own, Admins can view/edit/delete/insert all
 CREATE POLICY "Users can view own attendance" ON attendance FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can create own attendance" ON attendance FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Admins can view all attendance" ON attendance FOR SELECT USING (is_admin());
+CREATE POLICY "Admins can view, edit and delete all attendance" ON attendance FOR ALL USING (is_admin());
+CREATE POLICY "Admins can insert all attendance" ON attendance FOR INSERT WITH CHECK (is_admin());
 
 -- Authorizations: Users can view/create own, Director/Vicedirector can approve
 CREATE POLICY "Users can view own authorizations" ON authorizations FOR SELECT USING (auth.uid() = user_id);
