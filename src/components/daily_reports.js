@@ -173,8 +173,46 @@ export async function renderDailyReports(container, settings) {
             novelty = 'SESIÓN ABIERTA';
             isAuthorized = false;
           } else {
-            novelty = record.is_late ? 'TARDANZA' : 'Sin novedad';
-            isAuthorized = !record.is_late;
+            // Calcular dinámicamente si llegó tarde o trabajó menos horas de las programadas
+            let isLate = record.is_late;
+            let isShort = false;
+
+            if (schedule) {
+              const [schH, schM] = schedule.start_time.split(':').map(Number);
+              const checkInDate = new Date(record.check_in);
+              
+              const scheduledEntryMins = schH * 60 + schM;
+              const actualEntryMins = checkInDate.getHours() * 60 + checkInDate.getMinutes();
+              const tolerance = settings?.business_rules?.tolerance_minutes || 15;
+              
+              if (actualEntryMins - scheduledEntryMins > tolerance) {
+                isLate = true;
+              }
+
+              if (record.check_out) {
+                const checkOutDate = new Date(record.check_out);
+                const workedHrs = (checkOutDate - checkInDate) / 3600000;
+                
+                const [schOutH, schOutM] = schedule.end_time.split(':').map(Number);
+                const scheduledHrs = (schOutH * 60 + schOutM - scheduledEntryMins) / 60;
+                
+                // Si faltan más de 30 minutos de trabajo, marcar como incompleto
+                if (scheduledHrs - workedHrs > 0.5) {
+                  isShort = true;
+                }
+              }
+            }
+
+            if (isLate) {
+              novelty = 'TARDANZA';
+              isAuthorized = false;
+            } else if (isShort) {
+              novelty = 'HORARIO INCOMPLETO';
+              isAuthorized = false;
+            } else {
+              novelty = 'Sin novedad';
+              isAuthorized = true;
+            }
           }
         }
 
@@ -354,10 +392,26 @@ export async function renderDailyReports(container, settings) {
     }
   }
 
+  function checkUnresolvedNovelties() {
+    const unresolved = reportData.filter(d => d.novelty !== 'Sin novedad' && !d.is_authorized);
+    if (unresolved.length > 0) {
+      const names = unresolved.map(d => `${d.name} (${d.novelty})`).join('\n• ');
+      return confirm(
+        `⚠️ ¡ATENCIÓN! Se detectó personal con incumplimiento de horario o ausencias que NO han sido autorizados en el parte:\n\n• ${names}\n\n¿Deseas continuar de todas formas?`
+      );
+    }
+    return true;
+  }
+
   async function saveReport() {
     try {
       if (reportData.length === 0) {
         showNotification('No hay datos para guardar. Carga el reporte primero.', 'warning');
+        return;
+      }
+
+      // Check for unresolved novelties before saving
+      if (!checkUnresolvedNovelties()) {
         return;
       }
 
@@ -454,6 +508,16 @@ export async function renderDailyReports(container, settings) {
   }
 
   function generatePDF() {
+    if (reportData.length === 0) {
+      showNotification('No hay datos para exportar. Carga el reporte primero.', 'warning');
+      return;
+    }
+
+    // Check for unresolved novelties before printing/generating PDF
+    if (!checkUnresolvedNovelties()) {
+      return;
+    }
+
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     
