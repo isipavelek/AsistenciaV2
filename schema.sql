@@ -33,6 +33,8 @@ CREATE TABLE attendance (
     document_path TEXT,
     justified_by UUID REFERENCES profiles(id),
     notes TEXT,
+    mood TEXT,
+    mood_note TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
