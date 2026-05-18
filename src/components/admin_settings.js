@@ -43,7 +43,11 @@ export async function renderAdminSettings(container, settings) {
               <label>Radio de Fichaje (metros)</label>
               <input type="number" id="loc-radius" value="${loc.radius_meters}" required>
             </div>
-            <div id="settings-map"></div>
+            <div class="form-group" style="margin: 1.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
+              <input type="checkbox" id="loc-geofencing-enabled" style="width: 1.25rem; height: 1.25rem; margin: 0; cursor: pointer;" ${loc.geofencing_enabled !== false ? 'checked' : ''}>
+              <label for="loc-geofencing-enabled" style="margin: 0; cursor: pointer; font-weight: 500; font-size: 0.9rem; user-select: none;">Habilitar control de geolocalización (Rango GPS)</label>
+            </div>
+            <div id="settings-map" style="${loc.geofencing_enabled !== false ? '' : 'display: none;'}"></div>
             <button type="submit" class="save-btn" style="background: var(--success); margin-top: 1rem;">Guardar Ubicación</button>
           </form>
         </div>
@@ -190,12 +194,36 @@ export async function renderAdminSettings(container, settings) {
       lngInput.addEventListener('input', updateFromInputs);
       radiusInput.addEventListener('input', updateFromInputs);
       
+      const geofencingCheckbox = container.querySelector('#loc-geofencing-enabled');
+      const mapElement = container.querySelector('#settings-map');
+      if (geofencingCheckbox && mapElement) {
+        geofencingCheckbox.addEventListener('change', () => {
+          if (geofencingCheckbox.checked) {
+            mapElement.style.display = 'block';
+            setTimeout(() => {
+              if (map) map.invalidateSize();
+            }, 100);
+          } else {
+            mapElement.style.display = 'none';
+          }
+        });
+      }
+
       // Fix map render issue in some containers
-      setTimeout(() => map.invalidateSize(), 100);
+      setTimeout(() => {
+        if (map) map.invalidateSize();
+      }, 100);
     }
   }, 100);
 
   // Handlers
+  const withTimeout = (promise, ms = 8000) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+    ]);
+  };
+
   const handleSave = async (key, value, btn) => {
     btn.disabled = true;
     const originalText = btn.textContent;
@@ -203,13 +231,15 @@ export async function renderAdminSettings(container, settings) {
 
     try {
       console.log('Attempting Upsert...', key);
-      const { error: upsertError } = await supabase
+      const upsertPromise = supabase
         .from('settings')
         .upsert({ 
           key, 
           value, 
           updated_at: new Date().toISOString() 
         }, { onConflict: 'key' });
+
+      const { error: upsertError } = await withTimeout(upsertPromise, 8000);
       
       if (upsertError) {
         console.error('Upsert failed:', upsertError);
@@ -225,7 +255,10 @@ export async function renderAdminSettings(container, settings) {
 
     } catch (err) {
       console.error('CRITICAL SAVE ERROR:', err);
-      showNotification('Error al guardar: ' + (err.message || err.details || 'Error desconocido'), 'error');
+      const errMsg = err.message === 'timeout'
+        ? 'El servidor tardó demasiado en responder (Tiempo de espera agotado). Por favor, intenta de nuevo.'
+        : (err.message || err.details || 'Error de permisos o conexión');
+      showNotification('Error al guardar: ' + errMsg, 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = originalText;
@@ -237,7 +270,8 @@ export async function renderAdminSettings(container, settings) {
     const val = {
       lat: parseFloat(container.querySelector('#loc-lat').value),
       lng: parseFloat(container.querySelector('#loc-lng').value),
-      radius_meters: parseInt(container.querySelector('#loc-radius').value)
+      radius_meters: parseInt(container.querySelector('#loc-radius').value),
+      geofencing_enabled: container.querySelector('#loc-geofencing-enabled').checked
     };
     handleSave('school_location', val, container.querySelector('#location-form button[type=\"submit\"]'));
   };

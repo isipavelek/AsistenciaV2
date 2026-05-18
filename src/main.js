@@ -1588,11 +1588,17 @@ async function initClockIn() {
   const btn = document.querySelector('#clock-in-btn');
   const statusText = document.querySelector('#clock-in-status');
   
-  // If user is director or vicedirector, we completely bypass geofencing checking
+  // If user is director or vicedirector, or geofencing is globally disabled
   const isDirectorOrVice = ['director', 'vicedirector'].includes(profile?.role);
-  if (isDirectorOrVice) {
+  const geofencingDisabled = settings?.school_location?.geofencing_enabled === false;
+  
+  if (isDirectorOrVice || geofencingDisabled) {
     if (statusText) {
-      statusText.textContent = '📍 Modo Administrativo (Sin restricción de ubicación)';
+      if (geofencingDisabled) {
+        statusText.textContent = '📍 Control de ubicación desactivado (Fichaje Libre)';
+      } else {
+        statusText.textContent = '📍 Modo Administrativo (Sin restricción de ubicación)';
+      }
       statusText.style.color = 'var(--success)';
     }
     
@@ -1606,9 +1612,9 @@ async function initClockIn() {
         .limit(1)
         .single();
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = new Date().toLocaleDateString('en-CA');
       const lastRecordDate = lastRecord && (lastRecord.check_in || lastRecord.created_at);
-      const isLastRecordToday = lastRecordDate && lastRecordDate.split('T')[0] === todayStr;
+      const isLastRecordToday = lastRecordDate && new Date(lastRecordDate).toLocaleDateString('en-CA') === todayStr;
 
       if (lastRecord && isLastRecordToday) {
         btn.textContent = 'Fichar Salida';
@@ -1651,9 +1657,9 @@ async function initClockIn() {
         .limit(1)
         .single();
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = new Date().toLocaleDateString('en-CA');
       const lastRecordDate = lastRecord && (lastRecord.check_in || lastRecord.created_at);
-      const isLastRecordToday = lastRecordDate && lastRecordDate.split('T')[0] === todayStr;
+      const isLastRecordToday = lastRecordDate && new Date(lastRecordDate).toLocaleDateString('en-CA') === todayStr;
 
       if (lastRecord && isLastRecordToday) {
         btn.textContent = 'Fichar Salida';
@@ -1937,7 +1943,7 @@ async function handleClockOut(id) {
 
     const fullNote = classification ? `${classification.toUpperCase()}: ${note}` : note;
 
-    const { error } = await supabase.from('attendance')
+    const { data: updatedData, error } = await supabase.from('attendance')
       .update({ 
         check_out: new Date().toISOString(),
         mood: mood,
@@ -1947,10 +1953,16 @@ async function handleClockOut(id) {
           clock_out_classification: classification 
         }
       })
-      .eq('id', id);
+      .eq('id', id)
+      .select();
 
     if (error) {
       showNotification('Error al fichar salida: ' + error.message, 'error');
+      btnMain.disabled = false;
+      btnMain.textContent = 'Fichar Salida';
+    } else if (!updatedData || updatedData.length === 0) {
+      console.warn('Silent update failure detected (0 rows updated). Check RLS policies.');
+      showNotification('Error de permisos en la base de datos (RLS). No se pudo registrar la salida en el servidor.', 'error');
       btnMain.disabled = false;
       btnMain.textContent = 'Fichar Salida';
     } else {

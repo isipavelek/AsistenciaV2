@@ -30,6 +30,7 @@ DECLARE
     v_schedule RECORD;
     v_tolerance INT := 15; -- Minutos de tolerancia
     v_standard_entry TIME := '08:00:00'::TIME;
+    v_attendance_record RECORD;
 BEGIN
     -- Verificar si el token existe
     SELECT * INTO v_token_record FROM public.qr_tokens WHERE token = p_token LIMIT 1;
@@ -48,32 +49,55 @@ BEGIN
         RETURN json_build_object('exito', false, 'mensaje', 'El código QR ha expirado. Lee el nuevo código de la pantalla.');
     END IF;
 
-    -- Validado correctamente, proceder a registrar asistencia
-    v_day_of_week := EXTRACT(ISODOW FROM NOW());
-
-    -- Buscar horario del usuario
-    SELECT * INTO v_schedule FROM public.user_schedules WHERE user_id = p_user_id AND day_of_week = v_day_of_week LIMIT 1;
+    -- Buscar si ya existe un registro de entrada hoy sin salida (últimas 18 horas)
+    SELECT * INTO v_attendance_record 
+    FROM public.attendance 
+    WHERE user_id = p_user_id 
+      AND check_out IS NULL 
+      AND check_in >= (NOW() - INTERVAL '18 hours')
+    ORDER BY check_in DESC 
+    LIMIT 1;
 
     IF FOUND THEN
-        v_is_late := NOW()::time > (v_schedule.start_time + make_interval(mins => v_tolerance));
+        -- Si ya tiene una entrada abierta, registramos la SALIDA (check-out)
+        UPDATE public.attendance 
+        SET check_out = NOW(),
+            mood_note = COALESCE(mood_note || ' / ', '') || 'Salida registrada vía QR'
+        WHERE id = v_attendance_record.id;
+
+        -- Eliminar el token para que no pueda usarse dos veces
+        DELETE FROM public.qr_tokens WHERE id = v_token_record.id;
+
+        RETURN json_build_object('exito', true, 'mensaje', 'Salida registrada correctamente.');
     ELSE
-        v_is_late := NOW()::time > (v_standard_entry + make_interval(mins => v_tolerance));
+        -- Si no tiene una entrada abierta, registramos la ENTRADA (check-in)
+        v_day_of_week := EXTRACT(ISODOW FROM NOW());
+
+        -- Buscar horario del usuario
+        SELECT * INTO v_schedule FROM public.user_schedules WHERE user_id = p_user_id AND day_of_week = v_day_of_week LIMIT 1;
+
+        IF FOUND THEN
+            v_is_late := NOW()::time > (v_schedule.start_time + make_interval(mins => v_tolerance));
+        ELSE
+            v_is_late := NOW()::time > (v_standard_entry + make_interval(mins => v_tolerance));
+        END IF;
+
+        IF v_is_late THEN
+            v_entry_status := 'late';
+        ELSE
+            v_entry_status := 'present';
+        END IF;
+
+        -- Insertar el registro de entrada
+        INSERT INTO public.attendance (user_id, check_in, is_late, status, mood_note)
+        VALUES (p_user_id, NOW(), v_is_late, v_entry_status, 'Entrada registrada vía QR');
+
+        -- Eliminar el token para que no pueda usarse dos veces
+        DELETE FROM public.qr_tokens WHERE id = v_token_record.id;
+
+        RETURN json_build_object('exito', true, 'mensaje', 'Entrada registrada correctamente.');
     END IF;
 
-    IF v_is_late THEN
-        v_entry_status := 'late';
-    ELSE
-        v_entry_status := 'present';
-    END IF;
-
-    -- Insertar el registro (sin ubicación manual, o con ubicación especial 'QR')
-    INSERT INTO public.attendance (user_id, check_in, is_late, status, mood_note)
-    VALUES (p_user_id, NOW(), v_is_late, v_entry_status, 'Fichaje vía QR Local');
-
-    -- Eliminar el token para que no pueda usarse dos veces
-    DELETE FROM public.qr_tokens WHERE id = v_token_record.id;
-
-    RETURN json_build_object('exito', true, 'mensaje', 'Asistencia registrada correctamente.');
 EXCEPTION
     WHEN OTHERS THEN
         RETURN json_build_object('exito', false, 'mensaje', SQLERRM);
