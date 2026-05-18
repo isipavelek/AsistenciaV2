@@ -121,7 +121,11 @@ export async function renderDailyReports(container, settings) {
         showNotification('Ya existe un reporte para este día. Cargar los datos actuales sobreescribirá el borrador si decides guardar.', 'info');
       }
 
-      reportData = profiles.filter(p => schedules.some(s => s.user_id === p.id)).map(p => {
+      reportData = profiles.filter(p => 
+        schedules.some(s => s.user_id === p.id) || 
+        attendance.some(a => a.user_id === p.id) || 
+        allAuths.some(a => a.user_id === p.id)
+      ).map(p => {
         const schedule = schedules.find(s => s.user_id === p.id);
         const record = attendance.find(a => a.user_id === p.id);
         const auth = allAuths.find(a => a.user_id === p.id);
@@ -179,8 +183,8 @@ export async function renderDailyReports(container, settings) {
           attendance_id: record?.id,
           legajo: p.legajo_utn || '---',
           name: `${p.last_name} ${p.first_name}`.toUpperCase(),
-          schedule: `${schedule.start_time} - ${schedule.end_time}`,
-          scheduled_out: schedule.end_time,
+          schedule: schedule ? `${schedule.start_time} - ${schedule.end_time}` : 'Sin horario asignado',
+          scheduled_out: schedule ? schedule.end_time : null,
           novelty: novelty,
           is_authorized: isAuthorized,
           is_holiday: isHoliday,
