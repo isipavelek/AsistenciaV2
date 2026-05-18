@@ -46,6 +46,7 @@ CREATE TABLE authorizations (
     status TEXT CHECK (status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
     approved_by UUID REFERENCES profiles(id),
     notes TEXT,
+    admin_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
