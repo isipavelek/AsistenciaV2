@@ -9,76 +9,94 @@ export async function renderDailyReports(container, settings) {
   let selectedDate = now.toISOString().split('T')[0];
   let reportData = [];
 
+  const [initY, initM, initD] = selectedDate.split('-');
+  const initialFormattedDate = initY ? `${initD}/${initM}/${initY}` : selectedDate;
+
   container.innerHTML = `
-    <div class="animate-in">
+    <div class="animate-in" style="display: flex; flex-direction: column; gap: 1rem;">
       <div class="daily-reports-header">
         <h2 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="clipboard-list"></i> Parte Diario</h2>
-        <div style="display: flex; gap: 0.5rem;">
-          <button id="generate-pdf" style="width: auto; padding: 0.5rem 1rem; background: var(--secondary); color: white;">
-            <i data-lucide="file-text" style="width: 16px;"></i> Generar PDF
+      </div>
+
+      <!-- Redesigned Horizontal Calendar (Wider than tall) -->
+      <div class="card glass calendar-top-card" style="padding: 1.25rem; display: grid; grid-template-columns: 240px 1fr; gap: 2rem; align-items: center; border: 1px solid var(--glass-border); border-radius: 12px; background: var(--glass-bg);">
+        <!-- Left Side: Nav controls and legend -->
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; border-right: 1px solid var(--glass-border); padding-right: 1.5rem; height: 100%; justify-content: center;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <button id="prev-month" class="btn-icon" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: var(--text-normal); font-size: 1rem; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: bold; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">&lt;</button>
+            <span id="calendar-title" style="font-weight: 700; font-size: 1.15rem; color: var(--text-normal);">Cargando...</span>
+            <button id="next-month" class="btn-icon" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: var(--text-normal); font-size: 1rem; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: bold; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">&gt;</button>
+          </div>
+          <div class="calendar-legend" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.03);">
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 12px; height: 12px; border-radius: 50%; background: rgba(16, 185, 129, 0.4); border: 1px solid #10B981; display: inline-block;"></span> Generado</div>
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 12px; height: 12px; border-radius: 50%; background: rgba(239, 68, 68, 0.4); border: 1px solid #EF4444; display: inline-block;"></span> Faltante</div>
+          </div>
+        </div>
+
+        <!-- Right Side: High-contrast Grid -->
+        <div>
+          <div class="calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; font-size: 0.85rem; margin-bottom: 6px; font-weight: 600;">
+            <div style="color: var(--text-muted);">Lu</div>
+            <div style="color: var(--text-muted);">Ma</div>
+            <div style="color: var(--text-muted);">Mi</div>
+            <div style="color: var(--text-muted);">Ju</div>
+            <div style="color: var(--text-muted);">Vi</div>
+            <div style="color: var(--text-muted); font-weight: bold;">Sá</div>
+            <div style="color: var(--text-muted); font-weight: bold;">Do</div>
+          </div>
+          <div id="calendar-days" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;">
+            <!-- Days will go here dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Unified Compact Controls & Actions Bar (Directly above table) -->
+      <div class="card glass table-control-bar" style="padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--glass-border); border-radius: 8px; background: rgba(255, 255, 255, 0.02); margin-top: 0.5rem; flex-wrap: wrap; gap: 1rem;">
+        <!-- Compact Date Badge -->
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); padding: 6px 12px; border-radius: 6px; display: flex; align-items: center; gap: 8px; cursor: pointer;" onclick="document.getElementById('report-date').showPicker()">
+            <i data-lucide="calendar" style="width: 16px; height: 16px; color: var(--accent);"></i>
+            <span id="selected-date-badge" style="font-weight: 700; font-size: 0.95rem; color: var(--text-normal);">${initialFormattedDate}</span>
+          </div>
+          <input type="date" id="report-date" value="${selectedDate}" style="display: none;">
+        </div>
+
+        <!-- Sleek Buttons Group -->
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button id="load-report" style="width: auto; height: 36px; padding: 0 14px; font-size: 0.85rem; font-weight: 600; background: var(--accent-gradient); border-radius: 6px; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> Cargar
+          </button>
+          <button id="save-report" style="width: auto; height: 36px; padding: 0 14px; font-size: 0.85rem; font-weight: 600; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10B981; border-radius: 6px; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.25)'" onmouseout="this.style.background='rgba(16, 185, 129, 0.15)'">
+            <i data-lucide="save" style="width: 14px; height: 14px;"></i> Guardar
+          </button>
+          <button id="delete-report" style="width: auto; height: 36px; padding: 0 14px; font-size: 0.85rem; font-weight: 600; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #EF4444; border-radius: 6px; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(239, 68, 68, 0.25)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'">
+            <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Eliminar
+          </button>
+          <button id="generate-pdf" style="width: auto; height: 36px; padding: 0 14px; font-size: 0.85rem; font-weight: 600; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: var(--text-normal); border-radius: 6px; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(255, 255, 255, 0.1)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.05)'">
+            <i data-lucide="file-text" style="width: 14px; height: 14px;"></i> Exportar PDF
           </button>
         </div>
       </div>
 
-      <div class="daily-reports-layout" style="display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; margin-top: 1rem; align-items: start;">
-        <!-- Calendar Column -->
-        <div class="card glass calendar-sidebar" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; height: fit-content; border: 1px solid var(--glass-border); border-radius: 8px;">
-          <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <button id="prev-month" class="btn-icon" style="background: transparent; border: none; color: var(--text-normal); font-size: 1.2rem; cursor: pointer; padding: 4px 8px; font-weight: bold;">&lt;</button>
-            <span id="calendar-title" style="font-weight: bold; font-size: 1.05rem;">Cargando...</span>
-            <button id="next-month" class="btn-icon" style="background: transparent; border: none; color: var(--text-normal); font-size: 1.2rem; cursor: pointer; padding: 4px 8px; font-weight: bold;">&gt;</button>
-          </div>
-          <div class="calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 0.8rem;">
-            <div style="font-weight: bold; color: var(--text-muted);">Lu</div>
-            <div style="font-weight: bold; color: var(--text-muted);">Ma</div>
-            <div style="font-weight: bold; color: var(--text-muted);">Mi</div>
-            <div style="font-weight: bold; color: var(--text-muted);">Ju</div>
-            <div style="font-weight: bold; color: var(--text-muted);">Vi</div>
-            <div style="font-weight: bold; color: var(--text-muted);">Sá</div>
-            <div style="font-weight: bold; color: var(--text-muted);">Do</div>
-          </div>
-          <div id="calendar-days" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;">
-            <!-- Days will go here dynamically -->
-          </div>
-          <div class="calendar-legend" style="display: flex; gap: 1rem; justify-content: center; font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; border-top: 1px solid var(--glass-border); padding-top: 0.75rem;">
-            <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: rgba(16, 185, 129, 0.4); border: 1px solid #10B981; display: inline-block;"></span> Generado</span>
-            <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: rgba(239, 68, 68, 0.4); border: 1px solid #EF4444; display: inline-block;"></span> Faltante</span>
-          </div>
-        </div>
-
-        <!-- Main Content Column -->
-        <div class="daily-reports-main" style="display: flex; flex-direction: column; gap: 1rem;">
-          <div class="card glass filters-bar" style="margin-top: 0;">
-            <div class="form-group" style="margin-bottom:0">
-              <label>Fecha del Parte</label>
-              <input type="date" id="report-date" value="${selectedDate}">
-            </div>
-            <div class="filter-actions" style="display: flex; gap: 1rem;">
-              <button id="load-report" style="width: auto; height: 42px; background: var(--accent-gradient);">Cargar / Consolidar</button>
-              <button id="save-report" style="width: auto; height: 42px; background: var(--surface);">Guardar / Consolidar</button>
-            </div>
-          </div>
-
-          <div class="card glass table-wrapper">
-            <table class="daily-report-table">
-              <thead>
-                <tr style="border-bottom: 1px solid var(--glass-border);">
-                  <th style="padding: 1rem;">Personal / Legajo</th>
-                  <th style="padding: 1rem; width: 120px;">Horario</th>
-                  <th style="padding: 1rem; width: 220px;">Novedad</th>
-                  <th style="padding: 1rem; text-align: center; width: 100px;">Autorizado</th>
-                  <th style="padding: 1rem;">Observación</th>
-                </tr>
-              </thead>
-              <tbody id="daily-report-body">
-                <tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">Selecciona una fecha del calendario o ingresala arriba para cargar el reporte.</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <!-- Main Report Table -->
+      <div class="card glass table-wrapper" style="margin-top: 0;">
+        <table class="daily-report-table">
+          <thead>
+            <tr style="border-bottom: 1px solid var(--glass-border);">
+              <th style="padding: 1rem;">Personal / Legajo</th>
+              <th style="padding: 1rem; width: 120px;">Horario</th>
+              <th style="padding: 1rem; width: 220px;">Novedad</th>
+              <th style="padding: 1rem; text-align: center; width: 100px;">Autorizado</th>
+              <th style="padding: 1rem;">Observación</th>
+            </tr>
+          </thead>
+          <tbody id="daily-report-body">
+            <tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">Selecciona una fecha del calendario superior para cargar el reporte.</td></tr>
+          </tbody>
+        </table>
       </div>
 
-      <button id="back-to-dash" style="margin-top: 2rem; background: var(--surface);">Volver al Dashboard</button>
+      <button id="back-to-dash" style="margin-top: 1rem; background: var(--surface);">Volver al Dashboard</button>
     </div>
   `;
 
@@ -95,7 +113,11 @@ export async function renderDailyReports(container, settings) {
         return;
       }
 
-      console.log('--- Loading Daily Report for:', selectedDate);
+      // Update Date Badge Display
+      const [badgeY, badgeM, badgeD] = selectedDate.split('-');
+      const badgeText = badgeY ? `${badgeD}/${badgeM}/${badgeY}` : selectedDate;
+      const badgeElem = container.querySelector('#selected-date-badge');
+      if (badgeElem) badgeElem.textContent = badgeText;
       const loadBtn = container.querySelector('#load-report');
       loadBtn.disabled = true;
       loadBtn.textContent = 'Procesando...';
@@ -611,7 +633,64 @@ export async function renderDailyReports(container, settings) {
       const btn = container.querySelector('#save-report');
       if (btn) {
         btn.disabled = false;
-        btn.textContent = 'Guardar / Consolidar';
+        btn.innerHTML = '<i data-lucide="save" style="width: 14px; height: 14px;"></i> Guardar';
+        if (window.lucide) window.lucide.createIcons();
+      }
+    }
+  }
+
+  async function deleteReport() {
+    try {
+      if (!selectedDate) {
+        showNotification('Selecciona una fecha válida', 'warning');
+        return;
+      }
+
+      // Check if report exists
+      const { data: existing, error: checkError } = await supabase
+        .from('daily_reports')
+        .select('id')
+        .eq('date', selectedDate)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (!existing) {
+        showNotification('No existe ningún parte guardado para esta fecha', 'warning');
+        return;
+      }
+
+      if (!confirm(`¿Estás completamente seguro de que deseas eliminar permanentemente el parte del día ${selectedDate}? Esta acción borrará todos sus registros y no se puede deshacer.`)) {
+        return;
+      }
+
+      const deleteBtn = container.querySelector('#delete-report');
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = 'Eliminando...';
+
+      // Perform delete - cascade deletes report items automatically!
+      const { error: dError } = await supabase
+        .from('daily_reports')
+        .delete()
+        .eq('id', existing.id);
+
+      if (dError) throw dError;
+
+      showNotification('Parte diario eliminado con éxito', 'success');
+      
+      // Reset local reportData and UI state
+      reportData = [];
+      renderTable();
+      updateCalendar();
+    } catch (err) {
+      console.error('Error deleting report:', err);
+      showNotification('Error al eliminar: ' + err.message, 'error');
+    } finally {
+      const deleteBtn = container.querySelector('#delete-report');
+      if (deleteBtn) {
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = '<i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Eliminar';
+        if (window.lucide) window.lucide.createIcons();
       }
     }
   }
@@ -842,6 +921,7 @@ export async function renderDailyReports(container, settings) {
     updateCalendar();
   };
 
+  container.querySelector('#delete-report').onclick = deleteReport;
   container.querySelector('#generate-pdf').onclick = generatePDF;
 
   // Initialize view
