@@ -315,7 +315,7 @@ async function initCharts(container) {
         mood_note,
         check_out,
         created_at,
-        profiles ( full_name )
+        profiles!user_id ( full_name )
       `)
       .not('mood_note', 'is', null)
       .order('created_at', { ascending: false })

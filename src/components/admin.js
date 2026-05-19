@@ -1184,7 +1184,7 @@ export async function renderSecurityPanel(container) {
         id, 
         check_in, 
         metadata,
-        profiles (
+        profiles!user_id (
           first_name, 
           last_name, 
           legajo_utn
