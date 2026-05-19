@@ -538,7 +538,7 @@ ${R}`}class at extends Error{constructor({message:i,code:o,cause:d,name:h}){var 
         id, 
         check_in, 
         metadata,
-        profiles (
+        profiles!user_id (
           first_name, 
           last_name, 
           legajo_utn
@@ -1090,7 +1090,7 @@ ${R}`}class at extends Error{constructor({message:i,code:o,cause:d,name:h}){var 
         mood_note,
         check_out,
         created_at,
-        profiles ( full_name )
+        profiles!user_id ( full_name )
       `).not("mood_note","is",null).order("created_at",{ascending:!1}).limit(10);if(h)throw h;const f=a.querySelector("#mood-notes-list");if(f)if(d&&d.length>0){const p={excellent:"🤩",good:"😊",neutral:"😐",tired:"😫",stressed:"🤯"};f.innerHTML=d.map(y=>{var E;const b=y.check_out||y.created_at,v=b?new Date(b).toLocaleDateString():"--/--/----";return`
             <div style="padding: 1rem; border-bottom: 1px solid var(--glass-border); display: flex; gap: 1rem; align-items: flex-start;">
               <div style="font-size: 1.5rem;">${p[y.mood]||"😶"}</div>
