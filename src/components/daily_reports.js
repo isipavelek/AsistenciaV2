@@ -63,11 +63,10 @@ export async function renderDailyReports(container, settings) {
             <table class="daily-report-table">
               <thead>
                 <tr style="border-bottom: 1px solid var(--glass-border);">
-                  <th style="padding: 1rem; width: 80px;">Legajo</th>
-                  <th style="padding: 1rem;">Nombre y Apellido</th>
-                  <th style="padding: 1rem;">Horario</th>
-                  <th style="padding: 1rem;">Novedad</th>
-                  <th style="padding: 1rem; text-align: center;">Autorizado</th>
+                  <th style="padding: 1rem;">Personal / Legajo</th>
+                  <th style="padding: 1rem; width: 120px;">Horario</th>
+                  <th style="padding: 1rem; width: 220px;">Novedad</th>
+                  <th style="padding: 1rem; text-align: center; width: 100px;">Autorizado</th>
                   <th style="padding: 1rem;">Observación</th>
                 </tr>
               </thead>
@@ -329,36 +328,51 @@ export async function renderDailyReports(container, settings) {
         <tr style="border-bottom: 1px solid var(--glass-border); 
           ${item.is_holiday ? 'background: rgba(16, 185, 129, 0.05);' : ''} 
           ${item.is_pending ? 'background: rgba(245, 158, 11, 0.1);' : ''}">
-          <td data-label="Legajo" style="padding: 1rem; ${item.is_pending ? 'border-left: 4px solid var(--warning);' : ''}">${item.legajo}</td>
-          <td data-label="Personal" style="padding: 1rem;">
-            ${item.name}
-            ${item.is_pending ? '<br><span style="font-size: 0.7rem; color: var(--warning); font-weight: bold;">⚠️ LICENCIA PENDIENTE</span>' : ''}
+          
+          <td data-label="Personal" style="padding: 1rem; ${item.is_pending ? 'border-left: 4px solid var(--warning);' : ''}">
+            <div style="font-weight: 600; color: var(--text-normal); font-size: 0.95rem;">${item.name}</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; display: flex; align-items: center; gap: 8px;">
+              <span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border);">Legajo: ${item.legajo}</span>
+              ${item.is_pending ? '<span style="color: var(--warning); font-weight: bold; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="alert-triangle" style="width:12px; height:12px;"></i> LICENCIA PENDIENTE</span>' : ''}
+            </div>
           </td>
-          <td data-label="Horario" style="padding: 1rem; color: var(--text-muted); font-size: 0.85rem;">${item.schedule}</td>
+          
+          <td data-label="Horario" style="padding: 1rem; color: var(--text-normal); font-size: 0.85rem; font-weight: 500;">
+            ${item.schedule.replace(' - ', '<br><span style="color:var(--text-muted); font-size:0.75rem;">hasta</span> ')}
+          </td>
+          
           <td data-label="Novedad" style="padding: 1rem;">
             ${item.is_holiday ? 
-              `<span style="color: var(--success); font-weight: bold; font-size: 0.85rem;">${item.novelty}</span>` :
-              `<select class="novelty-select" data-idx="${idx}" style="font-size: 0.85rem; padding: 0.25rem; ${isRed ? 'color: var(--danger); font-weight: bold;' : ''}">
+              `<span style="background: rgba(16, 185, 129, 0.15); color: var(--success); font-weight: bold; font-size: 0.8rem; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.2); display: inline-block;">${item.novelty}</span>` :
+              `<select class="novelty-select" data-idx="${idx}" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid ${isRed ? 'rgba(239, 68, 68, 0.3)' : 'var(--glass-border)'}; ${isRed ? 'color: var(--danger); font-weight: bold; background: rgba(239, 68, 68, 0.05);' : 'color: var(--text-normal);'} transition: all 0.2s; outline: none; cursor: pointer; width: 100%;">
                 ${optionsHtml}
               </select>`
             }
           </td>
+          
           <td data-label="Autorizado" style="padding: 1rem; text-align: center;">
-            <input type="checkbox" class="auth-check" data-idx="${idx}" ${item.is_authorized ? 'checked' : ''} ${item.is_holiday ? 'disabled' : ''}>
+            <label style="display: inline-flex; align-items: center; justify-content: center; cursor: pointer; position: relative;">
+              <input type="checkbox" class="auth-check" data-idx="${idx}" ${item.is_authorized ? 'checked' : ''} ${item.is_holiday ? 'disabled' : ''} style="opacity: 0; position: absolute; width: 20px; height: 20px; cursor: pointer;">
+              <div class="custom-cb" style="width: 20px; height: 20px; border-radius: 6px; border: 2px solid ${item.is_authorized ? '#10B981' : 'var(--glass-border)'}; background: ${item.is_authorized ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.02)'}; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                <i data-lucide="check" style="width: 14px; height: 14px; color: ${item.is_authorized ? '#10B981' : 'transparent'}; stroke-width: 3;"></i>
+              </div>
+            </label>
           </td>
+          
           <td data-label="Observación" style="padding: 1rem;">
-            <input type="text" class="obs-input" data-idx="${idx}" value="${item.observation}" placeholder="..." style="font-size: 0.85rem; background: transparent; border: 1px solid var(--glass-border); width: 100%;">
+            <input type="text" class="obs-input" data-idx="${idx}" value="${item.observation}" placeholder="Agregar nota..." style="font-size: 0.85rem; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); padding: 0.4rem 0.6rem; border-radius: 6px; width: 100%; color: var(--text-normal); transition: all 0.2s;" onfocus="this.style.borderColor='var(--accent)'; this.style.background='rgba(255,255,255,0.05)';" onblur="this.style.borderColor='var(--glass-border)'; this.style.background='rgba(255,255,255,0.02)';">
           </td>
+          
           <td data-label="Acciones" style="padding: 1rem; text-align: right;">
             <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
               ${item.novelty === 'SESIÓN ABIERTA' ? `
-                <button class="action-btn fix-out" data-idx="${idx}" title="Cerrar salida con horario programado" style="background: var(--warning); color: black; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.75rem;">
-                  <i data-lucide="log-out" style="width: 14px;"></i> Cerrar
+                <button class="action-btn fix-out" data-idx="${idx}" title="Cerrar salida con horario programado" style="background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3); padding: 6px 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.background='rgba(245, 158, 11, 0.25)'" onmouseout="this.style.background='rgba(245, 158, 11, 0.15)'">
+                  <i data-lucide="log-out" style="width: 14px; height: 14px;"></i> Cerrar
                 </button>
               ` : ''}
               ${item.novelty.toLowerCase().includes('ausente') ? `
-                <button class="action-btn fix-present" data-idx="${idx}" title="Marcar como presente manual" style="background: var(--secondary); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.75rem;">
-                  <i data-lucide="check-circle" style="width: 14px;"></i> Presente
+                <button class="action-btn fix-present" data-idx="${idx}" title="Marcar como presente manual" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 6px 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.25)'" onmouseout="this.style.background='rgba(16, 185, 129, 0.15)'">
+                  <i data-lucide="check-circle" style="width: 14px; height: 14px;"></i> Presente
                 </button>
               ` : ''}
             </div>
