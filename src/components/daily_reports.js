@@ -20,33 +20,63 @@ export async function renderDailyReports(container, settings) {
         </div>
       </div>
 
-      <div class="card glass filters-bar">
-        <div class="form-group" style="margin-bottom:0">
-          <label>Fecha del Parte</label>
-          <input type="date" id="report-date" value="${selectedDate}">
+      <div class="daily-reports-layout" style="display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; margin-top: 1rem; align-items: start;">
+        <!-- Calendar Column -->
+        <div class="card glass calendar-sidebar" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; height: fit-content; border: 1px solid var(--glass-border); border-radius: 8px;">
+          <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <button id="prev-month" class="btn-icon" style="background: transparent; border: none; color: var(--text-normal); font-size: 1.2rem; cursor: pointer; padding: 4px 8px; font-weight: bold;">&lt;</button>
+            <span id="calendar-title" style="font-weight: bold; font-size: 1.05rem;">Cargando...</span>
+            <button id="next-month" class="btn-icon" style="background: transparent; border: none; color: var(--text-normal); font-size: 1.2rem; cursor: pointer; padding: 4px 8px; font-weight: bold;">&gt;</button>
+          </div>
+          <div class="calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 0.8rem;">
+            <div style="font-weight: bold; color: var(--text-muted);">Lu</div>
+            <div style="font-weight: bold; color: var(--text-muted);">Ma</div>
+            <div style="font-weight: bold; color: var(--text-muted);">Mi</div>
+            <div style="font-weight: bold; color: var(--text-muted);">Ju</div>
+            <div style="font-weight: bold; color: var(--text-muted);">Vi</div>
+            <div style="font-weight: bold; color: var(--text-muted);">Sá</div>
+            <div style="font-weight: bold; color: var(--text-muted);">Do</div>
+          </div>
+          <div id="calendar-days" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;">
+            <!-- Days will go here dynamically -->
+          </div>
+          <div class="calendar-legend" style="display: flex; gap: 1rem; justify-content: center; font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; border-top: 1px solid var(--glass-border); padding-top: 0.75rem;">
+            <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: rgba(16, 185, 129, 0.4); border: 1px solid #10B981; display: inline-block;"></span> Generado</span>
+            <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: rgba(239, 68, 68, 0.4); border: 1px solid #EF4444; display: inline-block;"></span> Faltante</span>
+          </div>
         </div>
-        <div class="filter-actions" style="display: flex; gap: 1rem;">
-          <button id="load-report" style="width: auto; height: 42px; background: var(--accent-gradient);">Cargar / Consolidar</button>
-          <button id="save-report" style="width: auto; height: 42px; background: var(--surface);">Guardar / Consolidar</button>
-        </div>
-      </div>
 
-      <div class="card glass table-wrapper">
-        <table class="daily-report-table">
-          <thead>
-            <tr style="border-bottom: 1px solid var(--glass-border);">
-              <th style="padding: 1rem; width: 80px;">Legajo</th>
-              <th style="padding: 1rem;">Nombre y Apellido</th>
-              <th style="padding: 1rem;">Horario</th>
-              <th style="padding: 1rem;">Novedad</th>
-              <th style="padding: 1rem; text-align: center;">Autorizado</th>
-              <th style="padding: 1rem;">Observación</th>
-            </tr>
-          </thead>
-          <tbody id="daily-report-body">
-            <tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">Selecciona una fecha y carga el reporte.</td></tr>
-          </tbody>
-        </table>
+        <!-- Main Content Column -->
+        <div class="daily-reports-main" style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="card glass filters-bar" style="margin-top: 0;">
+            <div class="form-group" style="margin-bottom:0">
+              <label>Fecha del Parte</label>
+              <input type="date" id="report-date" value="${selectedDate}">
+            </div>
+            <div class="filter-actions" style="display: flex; gap: 1rem;">
+              <button id="load-report" style="width: auto; height: 42px; background: var(--accent-gradient);">Cargar / Consolidar</button>
+              <button id="save-report" style="width: auto; height: 42px; background: var(--surface);">Guardar / Consolidar</button>
+            </div>
+          </div>
+
+          <div class="card glass table-wrapper">
+            <table class="daily-report-table">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--glass-border);">
+                  <th style="padding: 1rem; width: 80px;">Legajo</th>
+                  <th style="padding: 1rem;">Nombre y Apellido</th>
+                  <th style="padding: 1rem;">Horario</th>
+                  <th style="padding: 1rem;">Novedad</th>
+                  <th style="padding: 1rem; text-align: center;">Autorizado</th>
+                  <th style="padding: 1rem;">Observación</th>
+                </tr>
+              </thead>
+              <tbody id="daily-report-body">
+                <tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">Selecciona una fecha del calendario o ingresala arriba para cargar el reporte.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <button id="back-to-dash" style="margin-top: 2rem; background: var(--surface);">Volver al Dashboard</button>
@@ -136,33 +166,32 @@ export async function renderDailyReports(container, settings) {
         let isHoliday = !!holiday;
         let isPending = auth?.status === 'pending';
 
-        if (holiday) {
+        if (existingItem) {
+          // Si ya existe el parte guardado, mostramos exactamente lo que se guardó y consolidó
+          novelty = existingItem.novelty;
+          isAuthorized = existingItem.is_authorized;
+        } else if (holiday) {
           novelty = `FERIADO: ${holiday.description.toUpperCase()}`;
           isAuthorized = true;
         } else if (auth) {
+          // Si hay una licencia/permiso en trámite o aprobada, colocarla automáticamente
           if (auth.status === 'approved') {
-            novelty = auth.type.toUpperCase();
+            novelty = auth.type;
             isAuthorized = true;
           } else if (auth.status === 'pending') {
-            novelty = `${auth.type.toUpperCase()} (PENDIENTE)`;
+            novelty = `${auth.type} (EN TRÁMITE)`;
             isAuthorized = false;
           } else if (auth.status === 'rejected' && !record) {
-            novelty = 'AUSENTE (LIC. RECHAZADA)';
+            novelty = 'Ausente sin justificativo';
             isAuthorized = false;
           }
-        } else if (existingItem && existingReport.status === 'draft') {
-          // Keep manual edits if it's a draft we are reloading? 
-          // Re-evaluate: user wants to "pisar" but usually manual is first.
-          // We'll prioritize the auto-logic for now as requested.
-          novelty = existingItem.novelty;
-          isAuthorized = existingItem.is_authorized;
         } else if (!record) {
           // Check if date is within attendance period
           const period = settings?.attendance_period;
           const isInPeriod = period && selectedDate >= period.start_date && selectedDate <= period.end_date;
 
           if (isInPeriod) {
-            novelty = 'AUSENTE';
+            novelty = 'Ausente sin aviso';
             isAuthorized = false;
           } else {
             novelty = 'FUERA DE CICLO';
@@ -263,52 +292,80 @@ export async function renderDailyReports(container, settings) {
       header.appendChild(th);
     }
 
-    tbody.innerHTML = reportData.map((item, idx) => `
-      <tr style="border-bottom: 1px solid var(--glass-border); 
-        ${item.is_holiday ? 'background: rgba(16, 185, 129, 0.05);' : ''} 
-        ${item.is_pending ? 'background: rgba(245, 158, 11, 0.1);' : ''}">
-        <td data-label="Legajo" style="padding: 1rem; ${item.is_pending ? 'border-left: 4px solid var(--warning);' : ''}">${item.legajo}</td>
-        <td data-label="Personal" style="padding: 1rem;">
-          ${item.name}
-          ${item.is_pending ? '<br><span style="font-size: 0.7rem; color: var(--warning); font-weight: bold;">⚠️ LICENCIA PENDIENTE</span>' : ''}
-        </td>
-        <td data-label="Horario" style="padding: 1rem; color: var(--text-muted); font-size: 0.85rem;">${item.schedule}</td>
-        <td data-label="Novedad" style="padding: 1rem;">
-          ${item.is_holiday ? 
-            `<span style="color: var(--success); font-weight: bold; font-size: 0.85rem;">${item.novelty}</span>` :
-            `<select class="novelty-select" data-idx="${idx}" style="font-size: 0.85rem; padding: 0.25rem; ${item.novelty === 'AUSENTE' ? 'color: var(--danger); font-weight: bold;' : ''}">
-              <option value="Sin novedad" ${item.novelty === 'Sin novedad' ? 'selected' : ''}>Sin novedad</option>
-              <option value="AUSENTE" ${item.novelty === 'AUSENTE' ? 'selected' : ''}>AUSENTE</option>
-              <option value="AUSENTE POR MEDICO" ${item.novelty === 'AUSENTE POR MEDICO' ? 'selected' : ''}>AUSENTE POR MEDICO</option>
-              <option value="AUSENTE ART" ${item.novelty === 'AUSENTE ART' ? 'selected' : ''}>AUSENTE ART</option>
-              <option value="TARDANZA" ${item.novelty === 'TARDANZA' ? 'selected' : ''}>TARDANZA</option>
-              <option value="MEDIA JORNADA" ${item.novelty === 'MEDIA JORNADA' ? 'selected' : ''}>MEDIA JORNADA</option>
-              <option value="${item.novelty}" ${!['Sin novedad','AUSENTE','AUSENTE POR MEDICO','AUSENTE ART','TARDANZA','MEDIA JORNADA'].includes(item.novelty) ? 'selected' : ''}>${item.novelty}</option>
-            </select>`
-          }
-        </td>
-        <td data-label="Autorizado" style="padding: 1rem; text-align: center;">
-          <input type="checkbox" class="auth-check" data-idx="${idx}" ${item.is_authorized ? 'checked' : ''} ${item.is_holiday ? 'disabled' : ''}>
-        </td>
-        <td data-label="Observación" style="padding: 1rem;">
-          <input type="text" class="obs-input" data-idx="${idx}" value="${item.observation}" placeholder="..." style="font-size: 0.85rem; background: transparent; border: 1px solid var(--glass-border); width: 100%;">
-        </td>
-        <td data-label="Acciones" style="padding: 1rem; text-align: right;">
-          <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-            ${item.novelty === 'SESIÓN ABIERTA' ? `
-              <button class="action-btn fix-out" data-idx="${idx}" title="Cerrar salida con horario programado" style="background: var(--warning); color: black; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.75rem;">
-                <i data-lucide="log-out" style="width: 14px;"></i> Cerrar
-              </button>
-            ` : ''}
-            ${item.novelty === 'AUSENTE' ? `
-              <button class="action-btn fix-present" data-idx="${idx}" title="Marcar como presente manual" style="background: var(--secondary); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.75rem;">
-                <i data-lucide="check-circle" style="width: 14px;"></i> Presente
-              </button>
-            ` : ''}
-          </div>
-        </td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = reportData.map((item, idx) => {
+      const isRed = item.novelty.toLowerCase().includes('ausente') || 
+                    item.novelty.toLowerCase().includes('incompleto') || 
+                    item.novelty.toLowerCase().includes('tardanza');
+                    
+      const standardOptions = [
+        'Sin novedad',
+        'Ausente sin aviso',
+        'Ausente sin justificativo',
+        'Ausente con aviso',
+        'Permiso de media jornada',
+        'Permisos de salida excepcional',
+        'Ausente por medico',
+        'Ausente por enfermdad de largo tratamiento',
+        'Atención de familiar enfermo',
+        'Ausente por Mapaternidad',
+        'Matrimonio',
+        'Fallecimiento',
+        'Examen',
+        'TARDANZA',
+        'HORARIO INCOMPLETO',
+        'SESIÓN ABIERTA'
+      ];
+      
+      const options = [...standardOptions];
+      if (item.novelty && !options.includes(item.novelty)) {
+        options.push(item.novelty);
+      }
+
+      const optionsHtml = options.map(opt => `
+        <option value="${opt}" ${item.novelty === opt ? 'selected' : ''}>${opt}</option>
+      `).join('');
+
+      return `
+        <tr style="border-bottom: 1px solid var(--glass-border); 
+          ${item.is_holiday ? 'background: rgba(16, 185, 129, 0.05);' : ''} 
+          ${item.is_pending ? 'background: rgba(245, 158, 11, 0.1);' : ''}">
+          <td data-label="Legajo" style="padding: 1rem; ${item.is_pending ? 'border-left: 4px solid var(--warning);' : ''}">${item.legajo}</td>
+          <td data-label="Personal" style="padding: 1rem;">
+            ${item.name}
+            ${item.is_pending ? '<br><span style="font-size: 0.7rem; color: var(--warning); font-weight: bold;">⚠️ LICENCIA PENDIENTE</span>' : ''}
+          </td>
+          <td data-label="Horario" style="padding: 1rem; color: var(--text-muted); font-size: 0.85rem;">${item.schedule}</td>
+          <td data-label="Novedad" style="padding: 1rem;">
+            ${item.is_holiday ? 
+              `<span style="color: var(--success); font-weight: bold; font-size: 0.85rem;">${item.novelty}</span>` :
+              `<select class="novelty-select" data-idx="${idx}" style="font-size: 0.85rem; padding: 0.25rem; ${isRed ? 'color: var(--danger); font-weight: bold;' : ''}">
+                ${optionsHtml}
+              </select>`
+            }
+          </td>
+          <td data-label="Autorizado" style="padding: 1rem; text-align: center;">
+            <input type="checkbox" class="auth-check" data-idx="${idx}" ${item.is_authorized ? 'checked' : ''} ${item.is_holiday ? 'disabled' : ''}>
+          </td>
+          <td data-label="Observación" style="padding: 1rem;">
+            <input type="text" class="obs-input" data-idx="${idx}" value="${item.observation}" placeholder="..." style="font-size: 0.85rem; background: transparent; border: 1px solid var(--glass-border); width: 100%;">
+          </td>
+          <td data-label="Acciones" style="padding: 1rem; text-align: right;">
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+              ${item.novelty === 'SESIÓN ABIERTA' ? `
+                <button class="action-btn fix-out" data-idx="${idx}" title="Cerrar salida con horario programado" style="background: var(--warning); color: black; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.75rem;">
+                  <i data-lucide="log-out" style="width: 14px;"></i> Cerrar
+                </button>
+              ` : ''}
+              ${item.novelty.toLowerCase().includes('ausente') ? `
+                <button class="action-btn fix-present" data-idx="${idx}" title="Marcar como presente manual" style="background: var(--secondary); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.75rem;">
+                  <i data-lucide="check-circle" style="width: 14px;"></i> Presente
+                </button>
+              ` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
 
     if (window.lucide) window.lucide.createIcons();
 
@@ -451,12 +508,51 @@ export async function renderDailyReports(container, settings) {
       const { error: iError } = await supabase.from('daily_report_items').insert(items);
       if (iError) throw iError;
 
-      // Sincronizar los cambios en caliente con la tabla 'attendance' (ingreso/egreso) de manera ultra rápida en paralelo con Promise.all
+      // Sincronizar los cambios en caliente con la tabla 'attendance' (ingreso/egreso) y registrar las licencias administrativas correspondientes
       const syncPromises = reportData.map(async (d) => {
         let statusKey = 'present';
-        if (d.novelty === 'AUSENTE') statusKey = 'absent';
-        else if (d.novelty === 'TARDANZA') statusKey = 'late';
-        else if (d.novelty.includes('AUSENTE')) statusKey = 'absent';
+        if (d.novelty === 'TARDANZA') statusKey = 'late';
+        else if (d.novelty.toLowerCase().includes('ausente')) statusKey = 'absent';
+
+        const ADMIN_LICENSES = [
+          'Ausente con aviso',
+          'Permiso de media jornada',
+          'Permisos de salida excepcional',
+          'Ausente por medico',
+          'Ausente por enfermdad de largo tratamiento',
+          'Atención de familiar enfermo',
+          'Ausente por Mapaternidad',
+          'Matrimonio',
+          'Fallecimiento',
+          'Examen'
+        ];
+
+        if (ADMIN_LICENSES.includes(d.novelty)) {
+          const startOfDay = new Date(selectedDate + 'T00:00:00.000Z').toISOString();
+          const endOfDay = new Date(selectedDate + 'T23:59:59.999Z').toISOString();
+
+          // Verificar si ya existe esa autorización para el usuario ese día
+          const { data: existingAuth } = await supabase.from('authorizations')
+            .select('id')
+            .eq('user_id', d.user_id)
+            .eq('type', d.novelty)
+            .gte('start_date', startOfDay)
+            .lte('start_date', endOfDay)
+            .maybeSingle();
+
+          if (!existingAuth) {
+            await supabase.from('authorizations').insert({
+              user_id: d.user_id,
+              type: d.novelty,
+              start_date: startOfDay,
+              end_date: endOfDay,
+              status: 'approved',
+              approved_by: user.id,
+              notes: 'Impuesto por Dirección / RRHH / Vicedirección en el Parte Diario.',
+              admin_notes: 'Generado automáticamente desde la consolidación del parte diario.'
+            });
+          }
+        }
 
         if (d.attendance_id) {
           // Si ya existe el registro de asistencia, lo actualizamos directamente
@@ -585,7 +681,158 @@ export async function renderDailyReports(container, settings) {
     showNotification('PDF generado con éxito', 'success');
   }
 
-  container.querySelector('#load-report').onclick = loadReport;
-  container.querySelector('#save-report').onclick = saveReport;
+  // CALENDAR LOGIC
+  let calendarYear = now.getFullYear();
+  let calendarMonth = now.getMonth(); // 0-indexed
+
+  async function updateCalendar() {
+    const daysContainer = container.querySelector('#calendar-days');
+    const titleSpan = container.querySelector('#calendar-title');
+    if (!daysContainer || !titleSpan) return;
+
+    const monthNames = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    titleSpan.textContent = `${monthNames[calendarMonth]} ${calendarYear}`;
+
+    // Get first day of month and total days
+    const firstDay = new Date(calendarYear, calendarMonth, 1);
+    const lastDay = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+
+    // Adjust for Monday start (0=Monday, 6=Sunday)
+    let startDayIndex = firstDay.getDay();
+    if (startDayIndex === 0) startDayIndex = 6;
+    else startDayIndex -= 1;
+
+    // Fetch reports for this month
+    const monthStr = String(calendarMonth + 1).padStart(2, '0');
+    const startStr = `${calendarYear}-${monthStr}-01`;
+    const endStr = `${calendarYear}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
+
+    try {
+      const { data: reports } = await supabase.from('daily_reports')
+        .select('date, status')
+        .gte('date', startStr)
+        .lte('date', endStr);
+
+      const reportsMap = new Map();
+      if (reports) {
+        reports.forEach(r => reportsMap.set(r.date, r.status));
+      }
+
+      let daysHtml = '';
+
+      // Empty paddings for previous month's days
+      for (let i = 0; i < startDayIndex; i++) {
+        daysHtml += `<div style="padding: 6px;"></div>`;
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      // Generate month days
+      for (let day = 1; day <= lastDay; day++) {
+        const currentDayStr = `${calendarYear}-${monthStr}-${String(day).padStart(2, '0')}`;
+        const hasReport = reportsMap.has(currentDayStr);
+        const isSelected = selectedDate === currentDayStr;
+
+        let cellStyle = `cursor: pointer; border-radius: 4px; padding: 6px; font-weight: 600; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s; aspect-ratio: 1; border: 1px solid transparent; `;
+        
+        if (hasReport) {
+          // Green cell
+          cellStyle += `background: rgba(16, 185, 129, 0.15); color: #10B981; border-color: rgba(16, 185, 129, 0.3);`;
+        } else {
+          // Red cell if in the past or today, otherwise standard grey
+          if (currentDayStr <= todayStr) {
+            cellStyle += `background: rgba(239, 68, 68, 0.15); color: #EF4444; border-color: rgba(239, 68, 68, 0.3);`;
+          } else {
+            cellStyle += `background: rgba(255, 255, 255, 0.05); color: var(--text-muted);`;
+          }
+        }
+
+        if (isSelected) {
+          cellStyle += `outline: 2px solid var(--accent); outline-offset: 1px; box-shadow: 0 0 8px var(--accent); font-weight: bold;`;
+        }
+
+        daysHtml += `
+          <button class="calendar-day-btn" data-date="${currentDayStr}" style="${cellStyle}" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+            ${day}
+          </button>
+        `;
+      }
+
+      daysContainer.innerHTML = daysHtml;
+
+      // Attach click events
+      daysContainer.querySelectorAll('.calendar-day-btn').forEach(btn => {
+        btn.onclick = () => {
+          selectedDate = btn.dataset.date;
+          const dateInput = container.querySelector('#report-date');
+          if (dateInput) dateInput.value = selectedDate;
+          updateCalendar();
+          loadReport();
+        };
+      });
+    } catch (e) {
+      console.error('Error loading calendar:', e);
+    }
+  }
+
+  // Wire up calendar navigation
+  const prevBtn = container.querySelector('#prev-month');
+  const nextBtn = container.querySelector('#next-month');
+  
+  if (prevBtn) {
+    prevBtn.onclick = () => {
+      calendarMonth--;
+      if (calendarMonth < 0) {
+        calendarMonth = 11;
+        calendarYear--;
+      }
+      updateCalendar();
+    };
+  }
+
+  if (nextBtn) {
+    nextBtn.onclick = () => {
+      calendarMonth++;
+      if (calendarMonth > 11) {
+        calendarMonth = 0;
+        calendarYear++;
+      }
+      updateCalendar();
+    };
+  }
+
+  // Sync date input with calendar highlights
+  const dateInput = container.querySelector('#report-date');
+  if (dateInput) {
+    dateInput.onchange = (e) => {
+      selectedDate = e.target.value;
+      const [y, m, d] = selectedDate.split('-').map(Number);
+      if (y && m) {
+        calendarYear = y;
+        calendarMonth = m - 1; // 0-indexed
+      }
+      updateCalendar();
+      loadReport();
+    };
+  }
+
+  container.querySelector('#load-report').onclick = async () => {
+    await loadReport();
+    updateCalendar();
+  };
+
+  container.querySelector('#save-report').onclick = async () => {
+    await saveReport();
+    updateCalendar();
+  };
+
   container.querySelector('#generate-pdf').onclick = generatePDF;
+
+  // Initialize view
+  updateCalendar();
+  // Cargar automáticamente si ya viene una fecha seleccionada
+  loadReport();
 }
