@@ -15,27 +15,29 @@ export async function renderDailyReports(container, settings) {
   container.innerHTML = `
     <div class="animate-in" style="display: flex; flex-direction: column; gap: 1rem;">
       <div class="daily-reports-header">
-        <h2 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="clipboard-list"></i> Parte Diario</h2>
+        <h2 style="display: flex; align-items: center; gap: 0.5rem; margin: 0;"><i data-lucide="clipboard-list"></i> Parte Diario</h2>
       </div>
 
-      <!-- Redesigned Horizontal Calendar (Wider than tall) -->
-      <div class="card glass calendar-top-card" style="padding: 1.25rem; display: grid; grid-template-columns: 240px 1fr; gap: 2rem; align-items: center; border: 1px solid var(--glass-border); border-radius: 12px; background: var(--glass-bg);">
-        <!-- Left Side: Nav controls and legend -->
-        <div style="display: flex; flex-direction: column; gap: 0.75rem; border-right: 1px solid var(--glass-border); padding-right: 1.5rem; height: 100%; justify-content: center;">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
+      <!-- Compact Redesigned Horizontal Calendar (Centered & Balanced) -->
+      <div class="card glass calendar-top-card" style="padding: 1rem 1.5rem; display: flex; gap: 2rem; align-items: center; justify-content: space-between; border: 1px solid var(--glass-border); border-radius: 12px; background: var(--glass-bg); max-width: 800px; width: 100%; margin: 0 auto;">
+        <!-- Left Side: Compact Controls & Legend -->
+        <div style="display: flex; align-items: center; gap: 1.5rem; border-right: 1px solid var(--glass-border); padding-right: 1.5rem; min-width: 320px;">
+          <!-- Month Picker -->
+          <div style="display: flex; align-items: center; gap: 6px;">
             <button id="prev-month" class="btn-icon" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: var(--text-normal); font-size: 1rem; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: bold; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">&lt;</button>
-            <span id="calendar-title" style="font-weight: 700; font-size: 1.15rem; color: var(--text-normal);">Cargando...</span>
+            <span id="calendar-title" style="font-weight: 700; font-size: 1.1rem; color: var(--text-normal); min-width: 130px; text-align: center; display: inline-block; white-space: nowrap;">Cargando...</span>
             <button id="next-month" class="btn-icon" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: var(--text-normal); font-size: 1rem; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: bold; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">&gt;</button>
           </div>
-          <div class="calendar-legend" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.03);">
-            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 12px; height: 12px; border-radius: 50%; background: rgba(16, 185, 129, 0.4); border: 1px solid #10B981; display: inline-block;"></span> Generado</div>
-            <div style="display: flex; align-items: center; gap: 8px;"><span style="width: 12px; height: 12px; border-radius: 50%; background: rgba(239, 68, 68, 0.4); border: 1px solid #EF4444; display: inline-block;"></span> Faltante</div>
+          <!-- Legend -->
+          <div class="calendar-legend" style="display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; color: var(--text-muted);">
+            <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: rgba(16, 185, 129, 0.4); border: 1px solid #10B981; display: inline-block;"></span> Generado</div>
+            <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: rgba(239, 68, 68, 0.4); border: 1px solid #EF4444; display: inline-block;"></span> Faltante</div>
           </div>
         </div>
 
-        <!-- Right Side: High-contrast Grid -->
-        <div>
-          <div class="calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; font-size: 0.85rem; margin-bottom: 6px; font-weight: 600;">
+        <!-- Right Side: Compact Days Grid -->
+        <div style="flex-grow: 1; max-width: 420px; margin-left: auto;">
+          <div class="calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; font-size: 0.8rem; margin-bottom: 4px; font-weight: 600;">
             <div style="color: var(--text-muted);">Lu</div>
             <div style="color: var(--text-muted);">Ma</div>
             <div style="color: var(--text-muted);">Mi</div>
@@ -817,7 +819,7 @@ export async function renderDailyReports(container, settings) {
 
       // Empty paddings for previous month's days
       for (let i = 0; i < startDayIndex; i++) {
-        daysHtml += `<div style="padding: 6px;"></div>`;
+        daysHtml += `<div style="width: 28px; height: 28px; display: inline-block;"></div>`;
       }
 
       const todayStr = new Date().toISOString().split('T')[0];
@@ -828,7 +830,7 @@ export async function renderDailyReports(container, settings) {
         const hasReport = reportsMap.has(currentDayStr);
         const isSelected = selectedDate === currentDayStr;
 
-        let cellStyle = `cursor: pointer; border-radius: 4px; padding: 6px; font-weight: 600; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s; aspect-ratio: 1; border: 1px solid transparent; `;
+        let cellStyle = `cursor: pointer; border-radius: 6px; padding: 4px; font-weight: 600; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s; aspect-ratio: 1; border: 1px solid transparent; width: 28px; height: 28px; max-width: 28px; max-height: 28px; margin: 0 auto; `;
         
         if (hasReport) {
           // Green cell
