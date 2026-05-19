@@ -488,8 +488,7 @@ export async function renderDailyReports(container, settings) {
       const { data: report, error: rError } = await supabase.from('daily_reports').upsert({
         date: selectedDate,
         created_by: user.id,
-        status: 'consolidated',
-        updated_at: new Date().toISOString()
+        status: 'final'
       }, { onConflict: 'date' }).select().single();
 
       if (rError) throw rError;
