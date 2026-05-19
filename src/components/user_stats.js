@@ -79,7 +79,30 @@ export async function renderUserStats(container, userId) {
     limitsContainer.innerHTML = '';
     
     Object.entries(stats.limits_usage).forEach(([type, data]) => {
-      const percentage = Math.min(100, (data.used / data.max_year) * 100);
+      const hasYearlyLimit = data.max_year !== null && data.max_year !== undefined;
+      const hasMonthlyLimit = data.max_month !== null && data.max_month !== undefined;
+      
+      let percentage = 0;
+      let labelText = '';
+      let remainingText = '';
+      
+      if (hasYearlyLimit) {
+        percentage = Math.min(100, (data.used / data.max_year) * 100);
+        labelText = `${data.used} / ${data.max_year}`;
+        remainingText = `Quedan: ${data.remaining}`;
+        if (hasMonthlyLimit) {
+          remainingText += ` (Límite mensual: ${data.max_month})`;
+        }
+      } else if (hasMonthlyLimit) {
+        percentage = Math.min(100, (data.used_month / data.max_month) * 100);
+        labelText = `${data.used_month} / ${data.max_month} (Mensual)`;
+        remainingText = `Quedan: ${data.remaining_month} este mes`;
+      } else {
+        percentage = 0;
+        labelText = `${data.used} / Sin límite`;
+        remainingText = `Quedan: Sin límite`;
+      }
+      
       const colorClass = percentage > 80 ? 'danger' : (percentage > 50 ? 'warning' : '');
       
       const item = document.createElement('div');
@@ -87,13 +110,13 @@ export async function renderUserStats(container, userId) {
       item.innerHTML = `
         <div class="limit-header">
           <span>${type}</span>
-          <span class="text-dim">${data.used} / ${data.max_year}</span>
+          <span class="text-dim">${labelText}</span>
         </div>
         <div class="progress-bar">
           <div class="progress-fill ${colorClass}" style="width: ${percentage}%"></div>
         </div>
-        <div style="text-align: right; font-size: 0.75rem; margin-top: 0.25rem;">
-          Quedan: ${data.remaining}
+        <div style="text-align: right; font-size: 0.75rem; margin-top: 0.25rem; color: var(--text-muted);">
+          ${remainingText}
         </div>
       `;
       limitsContainer.appendChild(item);
